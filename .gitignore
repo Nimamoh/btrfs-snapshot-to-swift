@@ -1,0 +1,10 @@
+.env
+.vscode
+.pytest_cache
+.mypy_cache
+.idea
+__pycache__
+ignored
+README-site.md
+draft.py
+devenv.sh
