@@ -3,8 +3,11 @@
 .pytest_cache
 .mypy_cache
 .idea
+.venv
+dist
 __pycache__
+*.egg-info
 ignored
 README-site.md
 draft.py
-devenv.sh
+devenv.*

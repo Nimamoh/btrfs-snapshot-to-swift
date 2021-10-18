@@ -23,6 +23,15 @@ OS_REGION_NAME=GRA
 
 Using btrfsutil python bindings. While it's provided with btrfs-progs on arch. For ubuntu: `apt install python3-btrfsutil`
 
+In order to enable it in venv. Create a `.venv/lib/<python_version>/site-packages/.pth` file containing the path containing the btrfsutil C extension.
+
+Example:
+
+`./.venv/lib/python3.9/site-packages/.pth` containing:
+```text
+/usr/lib/python3/dist-packages
+```
+
 ### Create a local btrfs filesystem for testing
 
 Embedding a btrfs filesystem in a file for testing, for example:
