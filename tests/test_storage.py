@@ -8,6 +8,7 @@ from btrfs import Snapshot
 from storage import (
     _compute_common_prefix,
     compute_storage_filename,
+    _sanitize_storage_filename,
     only_stored,
 )
 
@@ -36,6 +37,19 @@ def test_compute_common_prefix():
     assert "" == _compute_common_prefix(l)
 
 
+def test_compute_storage_filename():
+    name = "prefix/subvol.1"
+    assert "prefix\\x2fsubvol.1" == _sanitize_storage_filename(name)
+
+    name = "containing\\x2fcharacter"
+    with pytest.raises(ValueError):
+        _sanitize_storage_filename(name)
+
+    name = "containing\x00nullcharacter"
+    with pytest.raises(ValueError):
+        _sanitize_storage_filename(name)
+
+
 def _configure_list_mock(mock: MagicMock, *names: str):
     """Configure swift list mock for it to return successfully the list of name in parameters"""
     mock.return_value = [{"success": True, "listing": list({"name": x} for x in names)}]
@@ -44,7 +58,7 @@ def _configure_list_mock(mock: MagicMock, *names: str):
 def _make_btrfs_snapshots(*rel_paths: str):
     """Make list of btrfs snapshots with rel_paths, faking/inferring rest of parameters"""
     return list(
-        Snapshot(fs_uuid=uuid.uuid4(), rel_path=x, abs_path="/", otime=0.0)
+        Snapshot(fs_uuid=str(uuid.uuid4()), rel_path=x, abs_path="/", otime=0.0)
         for x in rel_paths
     )
 

@@ -2,10 +2,14 @@
 Module related to business logic.
 """
 
-from typing import Sequence, Union
-from btrfs import Snapshot
+from typing import Optional, Sequence, Union
+from btrfs import Snapshot, SnapshotsDifference
+from storage import compute_storage_filename
 
-import dataclasses
+import os
+import logging
+
+_log = logging.getLogger(__name__)
 
 
 class UnexpectedSnapshotStorageLayout(Exception):
@@ -18,20 +22,12 @@ def unequal_snapshots_ex(s1, s2) -> UnexpectedSnapshotStorageLayout:
     raise UnexpectedSnapshotStorageLayout(f"{s1} should equals {s2}")
 
 
-@dataclasses.dataclass
-class SnapshotsDifference:
-    """Represents the difference between two snapshots"""
-    parent: Snapshot
-    snapshot: Snapshot
+ContentToUpload = Union[Snapshot, SnapshotsDifference]
 
-    def __str__(self) -> str:
-        return f"changes between {self.parent} and {self.snapshot}"
-
-ContentToUpload = Union[None, Snapshot, SnapshotsDifference]
 
 def compute_snapshot_to_upload(
     snapshots: Sequence[Snapshot], archived_snapshots: Sequence[Snapshot]
-) -> ContentToUpload:
+) -> Optional[ContentToUpload]:
     """
     Compute snapshots to save and upload,
 
@@ -83,3 +79,11 @@ def compute_snapshot_to_upload(
         return None
     else:
         return SnapshotsDifference(parent=parent, snapshot=current)
+
+
+def prepare_content_to_upload_to_file(to_upload: ContentToUpload, basedir: str):
+    """Prepare the content to upload to a local file"""
+    filename = compute_storage_filename(to_upload)
+    filepath = os.path.join(basedir, filename)
+    _log.info(f"Preparing {to_upload} into {filepath}")
+    _log.warning("Not implemented yet")

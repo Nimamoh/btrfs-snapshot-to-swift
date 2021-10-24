@@ -26,6 +26,16 @@ class Snapshot:
     def __str__(self) -> str:
         return f'<FS_TREE>/{self.rel_path}'
 
+@dataclass(frozen=True)
+class SnapshotsDifference:
+    """Represents the difference between two snapshots"""
+
+    parent: Snapshot
+    snapshot: Snapshot
+
+    def __str__(self) -> str:
+        return f"changes between {self.parent} and {self.snapshot}"
+
 
 def __compute_root_path(path):
     """Compute the path of the root filesystem from subvolume path given in argument"""

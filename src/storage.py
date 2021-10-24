@@ -2,10 +2,12 @@
 storage module is about archive storage routines
 """
 import logging
+from typing import Union
 
 from swiftclient.service import SwiftService
 
-from btrfs import Snapshot
+from btrfs import Snapshot, SnapshotsDifference
+from exceptions import ProgrammingError
 
 log = logging.getLogger(__name__)
 
@@ -37,17 +39,40 @@ def _parse_list_page_gen(list_parts_gen):
     return names
 
 
-def compute_storage_filename(snapshot: Snapshot) -> str:
+def compute_storage_filename(
+    snapshot_or_diff: Union[Snapshot, SnapshotsDifference]
+) -> str:
     """
     Compute unique filename of a btrfs snapshot for storage.
     Basically fs_uuid/relpath. Uniquely identifies a btrfs snapshot.
     """
-    return f"{snapshot.fs_uuid}/{snapshot.rel_path}"
+    s = None
+    if isinstance(snapshot_or_diff, Snapshot):
+        s = snapshot_or_diff
+    elif isinstance(snapshot_or_diff, SnapshotsDifference):
+        s = snapshot_or_diff.snapshot
+    else:
+        raise ProgrammingError
+
+    return _sanitize_storage_filename(f"{s.fs_uuid}/{s.rel_path}")
 
 
-def only_stored(
-    ro_snapshots: list[Snapshot], container_name: str
-) -> list[Snapshot]:
+def _sanitize_storage_filename(name: str):
+    """
+    Sanitize name for it to be a valid unix filename.
+    Raises:
+      ValueError if we cannot sanitize filename garanteeing collision free
+    """
+    slash_surrogate='\\x2f'
+    if "\x00" in name:
+        raise ValueError("Null character is forbidden in unix filename")
+    if slash_surrogate in name:
+        raise ValueError("We do not support filename with '\\x2f' in it.")
+    name = name.replace("/", slash_surrogate)
+    return name
+
+
+def only_stored(ro_snapshots: list[Snapshot], container_name: str) -> list[Snapshot]:
     """
     Args:
       ro_snapshots(list[Snapshot]): snapshots to check against storage
@@ -64,9 +89,11 @@ def only_stored(
         list_page_gen = swift.list(container=container_name, options={"prefix": prefix})
         container_item_names = _parse_list_page_gen(list_page_gen)
 
-    log.debug(f'Found {len(container_item_names)} files.')
+    log.debug(f"Found {len(container_item_names)} files.")
     result = [
         s for s in ro_snapshots if compute_storage_filename(s) in container_item_names
     ]
-    log.debug(f'Filtering... Found {len(result)} files corresponding to actual snapshots.')
+    log.debug(
+        f"Filtering... Found {len(result)} files corresponding to actual snapshots."
+    )
     return result

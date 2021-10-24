@@ -4,6 +4,7 @@ import logging
 import coloredlogs
 import os
 import sys
+import tempfile
 
 import btrfs
 import argparse
@@ -11,7 +12,12 @@ import argparse
 import pyinputplus as pyin
 
 from storage import only_stored
-from business import SnapshotsDifference, compute_snapshot_to_upload, ContentToUpload
+from business import (
+    SnapshotsDifference,
+    prepare_content_to_upload_to_file,
+    compute_snapshot_to_upload,
+    ContentToUpload,
+)
 
 from ansi.advanced import print_lines
 from ansi import colors
@@ -24,21 +30,21 @@ _log = logging.getLogger(__name__)
 
 def _look_for_archived_snapshots(ro_snapshots, container_name, verbose):
     """Look for archived snapshots in storage"""
-    snapshot_paths = [s.rel_path for s in ro_snapshots]
+    lines = [s.rel_path for s in ro_snapshots]
     archived_snapshots = []
-    with print_lines(snapshot_paths, append_only=verbose, printfn=_log.info) as printer:
-        snapshot_paths.append(f"Requesting Web Archive... ⏳")
-        printer.reprint(snapshot_paths)
+    with print_lines(lines, append_only=verbose, printfn=_log.info) as printer:
+        lines.append(f"Requesting Web Archive... ⏳")
+        printer.reprint(lines)
 
         archived_snapshots = only_stored(ro_snapshots, container_name)
 
         in_cloud_str = f'{colors.in_green("in ☁️")}'
         not_in_cloud_str = f'{colors.in_red("not in ☁️")}'
-        snapshot_paths = [
+        lines = [
             f"{s.rel_path}... {in_cloud_str if s in archived_snapshots else not_in_cloud_str}"
             for s in ro_snapshots
         ]
-        printer.reprint(snapshot_paths)
+        printer.reprint(lines)
     return archived_snapshots
 
 
@@ -64,7 +70,7 @@ def _ask_uploading(to_upload: ContentToUpload):
     return response == "yes"
 
 
-def main(path_, container, verbose):
+def main(path_, container, tmpdirname, verbose):
 
     snapshots = [x for x in btrfs.find_ro_snapshots_of(path_)]
 
@@ -76,10 +82,10 @@ def main(path_, container, verbose):
 
     to_upload = compute_snapshot_to_upload(snapshots, archived_snapshots)
     consent = _ask_uploading(to_upload)
-    if consent:
-        _log.warning("Not implemented yet")
-    else:
+    if not consent:
         _log.info("You refused, bybye")
+        return
+    prepare_content_to_upload_to_file(to_upload, tmpdirname)
 
 
 if __name__ == "__main__":
@@ -94,6 +100,13 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
+        "--work-dir",
+        dest="work_dir",
+        type=str,
+        help="Directory in which the script will store snapshots before sending",
+        required=False,
+    )
+    parser.add_argument(
         "-v",
         dest="verbose",
         type=bool,
@@ -106,10 +119,15 @@ if __name__ == "__main__":
 
     level = logging.INFO
     format = "%(message)s"
+
+    path = os.path.abspath(args.path)
+    verbose = args.verbose
+    container_name = args.container_name
+    work_dir = args.work_dir
+
     if args.verbose:
         level = logging.DEBUG
         format = "%(asctime)s - %(name)-12s %(levelname)-8s %(message)s"
-
     formatter = coloredlogs.ColoredFormatter(format)
     stream = logging.StreamHandler()
     stream.setLevel(level)
@@ -120,7 +138,9 @@ if __name__ == "__main__":
     logging.getLogger("urllib3").setLevel(logging.WARNING)  #
     logging.getLogger("swiftclient").setLevel(logging.WARNING)  #
 
-    path = os.path.abspath(args.path)
+    _log.debug(f"Using storage container name {container_name}")
     _log.debug(f"path: {path}")
 
-    main(path, container=args.container_name, verbose=args.verbose)
+    with tempfile.TemporaryDirectory(dir=work_dir) as tmpdirname:
+        _log.debug(f"Using working directory {tmpdirname}")
+        main(path, container=container_name, tmpdirname=tmpdirname, verbose=verbose)
