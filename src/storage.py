@@ -5,7 +5,7 @@ import logging
 
 from swiftclient.service import SwiftService
 
-from btrfs import BtrfsSnapshot
+from btrfs import Snapshot
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def _parse_list_page_gen(list_parts_gen):
     return names
 
 
-def compute_storage_filename(snapshot: BtrfsSnapshot) -> str:
+def compute_storage_filename(snapshot: Snapshot) -> str:
     """
     Compute unique filename of a btrfs snapshot for storage.
     Basically fs_uuid/relpath. Uniquely identifies a btrfs snapshot.
@@ -46,11 +46,11 @@ def compute_storage_filename(snapshot: BtrfsSnapshot) -> str:
 
 
 def only_stored(
-    ro_snapshots: list[BtrfsSnapshot], container_name: str
-) -> list[BtrfsSnapshot]:
+    ro_snapshots: list[Snapshot], container_name: str
+) -> list[Snapshot]:
     """
     Args:
-      ro_snapshots(list[BtrfsSnapshot]): snapshots to check against storage
+      ro_snapshots(list[Snapshot]): snapshots to check against storage
 
     Returns:
       Filtered list of btrfs snapshots, conserving only the ones present in storage

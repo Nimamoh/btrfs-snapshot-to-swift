@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 from swiftclient.service import SwiftService
-from btrfs import BtrfsSnapshot
+from btrfs import Snapshot
 from storage import (
     _compute_common_prefix,
     compute_storage_filename,
@@ -14,8 +14,8 @@ from storage import (
 
 @patch("test_storage.SwiftService.list")
 def test_only_stored(listMock: MagicMock):
-    snapshots = __make_btrfs_snapshots("snap/one", "snap/two")
-    __configure_list_mock(
+    snapshots = _make_btrfs_snapshots("snap/one", "snap/two")
+    _configure_list_mock(
         listMock, "whatever/snap/three", compute_storage_filename(snapshots[0])
     )
 
@@ -36,18 +36,18 @@ def test_compute_common_prefix():
     assert "" == _compute_common_prefix(l)
 
 
-def __configure_list_mock(mock: MagicMock, *names: str):
+def _configure_list_mock(mock: MagicMock, *names: str):
     """Configure swift list mock for it to return successfully the list of name in parameters"""
     mock.return_value = [{"success": True, "listing": list({"name": x} for x in names)}]
 
 
-def __make_btrfs_snapshots(*rel_paths: str):
+def _make_btrfs_snapshots(*rel_paths: str):
     """Make list of btrfs snapshots with rel_paths, faking/inferring rest of parameters"""
     return list(
-        BtrfsSnapshot(fs_uuid=uuid.uuid4(), rel_path=x, abs_path="/", otime=0.0)
+        Snapshot(fs_uuid=uuid.uuid4(), rel_path=x, abs_path="/", otime=0.0)
         for x in rel_paths
     )
 
 
 if __name__ == "__main__":
-    pytest.main()
+    pytest.main(["-s", __file__])

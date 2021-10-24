@@ -23,6 +23,7 @@ setup(
     install_requires=[
         'python-swiftclient',
         'python-keystoneclient',
+        'pyinputplus',
         'coloredlogs',
         'ansi',
     ],

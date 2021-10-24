@@ -5,7 +5,7 @@ from typing import Hashable
 from unittest.mock import MagicMock, patch
 import uuid
 
-from btrfs import BtrfsSnapshot, find_ro_snapshots_of
+from btrfs import Snapshot, find_ro_snapshots_of
 
 
 @patch("btrfsutil.SubvolumeIterator")
@@ -42,20 +42,21 @@ def test_find_ro_snapshots_of(
     test_with_model("/")
 
 
-def test_btrfs_snapshot_is_hashable():
-    btrfs_snapshot = BtrfsSnapshot("", "", "", 0.0)
-    assert isinstance(btrfs_snapshot, Hashable)
+def test_snapshot_is_hashable():
+    snapshot = Snapshot("", "", "", 0.0)
+    assert isinstance(snapshot, Hashable)
 
 
-def test_btrfs_snapshot_uuid():
+def test_shapshot_uuid():
     uuid_str = str(uuid.uuid4())
-    s = BtrfsSnapshot(fs_uuid=uuid_str, rel_path="", abs_path="", otime=0.0)
+    s = Snapshot(fs_uuid=uuid_str, rel_path="", abs_path="", otime=0.0)
     l = []
     l.append(s)
 
 
 @dataclass
-class _FakeBtrfsSubvol:
+class _FakeSubvol:
+    """Information holder for faking btrfsutil calls"""
     relpath: str
     abspath: str
     id: int
@@ -68,7 +69,7 @@ class _FakeBtrfsSubvol:
         return str(uuid.UUID(bytes=self.uuid))
 
 
-def _subvolume_info(model: list[_FakeBtrfsSubvol]):
+def _subvolume_info(model: list[_FakeSubvol]):
     """Generate mocked version of btrfs.subvolume_info(path, <id>)"""
 
     def inner(path, id_=0):
@@ -80,7 +81,7 @@ def _subvolume_info(model: list[_FakeBtrfsSubvol]):
     return inner
 
 
-def _subvolume_path(model: list[_FakeBtrfsSubvol]):
+def _subvolume_path(model: list[_FakeSubvol]):
     """Generate mocked version of btrfs.subvolume_path(path, <id>)"""
 
     def inner(fullpath):
@@ -89,7 +90,7 @@ def _subvolume_path(model: list[_FakeBtrfsSubvol]):
     return inner
 
 
-def _get_subvolume_read_only(model: list[_FakeBtrfsSubvol]):
+def _get_subvolume_read_only(model: list[_FakeSubvol]):
     """Generate mocked version of btrfs.get_subvolume_read_only(path)"""
 
     def inner(fullpath: str):
@@ -99,7 +100,7 @@ def _get_subvolume_read_only(model: list[_FakeBtrfsSubvol]):
     return inner
 
 
-def _subvolume_iterator(model: list[_FakeBtrfsSubvol]):
+def _subvolume_iterator(model: list[_FakeSubvol]):
     """Generate mocked version of btrfs.SubvolumeIterator"""
 
     @contextmanager
@@ -113,14 +114,14 @@ def _subvolume_iterator(model: list[_FakeBtrfsSubvol]):
 
 
 class _TestModel:
-    def __init__(self, model: list[_FakeBtrfsSubvol]) -> None:
+    def __init__(self, model: list[_FakeSubvol]) -> None:
         self._model = model
 
-    def subvol(self, relpath: str) -> _FakeBtrfsSubvol:
+    def subvol(self, relpath: str) -> _FakeSubvol:
         """Finds first subvol in test model having specified relpath"""
         return next(s for s in self._model if s.relpath == relpath)
 
-    def subvols(self) -> tuple[_FakeBtrfsSubvol, ...]:
+    def subvols(self) -> tuple[_FakeSubvol, ...]:
         return tuple(self._model)
 
 
@@ -133,21 +134,21 @@ def _make_model(rootfs: str) -> _TestModel:
     subvol_uuid = uuid.uuid4().bytes
     subvol_1_uuid = uuid.uuid4().bytes
     subvols = [
-        _FakeBtrfsSubvol(
+        _FakeSubvol(
             relpath="",
             abspath=f"{rootfs}",
             id=5,
             uuid=uuid.uuid4().bytes,
             parent_uuid=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
         ),
-        _FakeBtrfsSubvol(
+        _FakeSubvol(
             relpath="subvol",
             abspath=f"{prefix_rootfs}subvol",
             id=6,
             uuid=subvol_uuid,
             parent_uuid=rootfs_uuid,
         ),
-        _FakeBtrfsSubvol(
+        _FakeSubvol(
             relpath="snapshots/subvol.1",
             abspath=f"{prefix_rootfs}snapshots/subvol.1",
             id=7,
@@ -156,7 +157,7 @@ def _make_model(rootfs: str) -> _TestModel:
             ro=True,
             otime=1.0,
         ),
-        _FakeBtrfsSubvol(
+        _FakeSubvol(
             relpath="snapshots/subvol.2",
             abspath=f"{prefix_rootfs}snapshots/subvol.2",
             id=8,
@@ -165,7 +166,7 @@ def _make_model(rootfs: str) -> _TestModel:
             ro=True,
             otime=2.0,
         ),
-        _FakeBtrfsSubvol(
+        _FakeSubvol(
             relpath="snapshots/subvol.0",
             abspath=f"{prefix_rootfs}snapshots/subvol.0",
             id=11,
@@ -174,14 +175,14 @@ def _make_model(rootfs: str) -> _TestModel:
             ro=True,
             otime=0.0,
         ),
-        _FakeBtrfsSubvol(
+        _FakeSubvol(
             relpath="snapshots/subvol.3",
             abspath=f"{prefix_rootfs}snapshots/subvol.3",
             id=10,
             uuid=uuid.uuid4().bytes,
             parent_uuid=subvol_uuid,
         ),
-        _FakeBtrfsSubvol(
+        _FakeSubvol(
             relpath="snapshots/subvol.1.1",
             abspath=f"{prefix_rootfs}snapshots/subvol.1.1",
             id=1,
