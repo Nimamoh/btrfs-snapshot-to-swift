@@ -25,6 +25,7 @@ setup(
         'python-keystoneclient',
         'pyinputplus',
         'coloredlogs',
+        'humanize',
         'ansi',
     ],
     extras_require={

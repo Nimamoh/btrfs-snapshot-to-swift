@@ -105,7 +105,7 @@ def prepare_content_to_upload_to_file(to_upload: ContentToUpload, basedir: str):
     basedir = os.path.abspath(basedir)
     filename = compute_storage_filename(to_upload)
     filepath = os.path.join(os.path.abspath(basedir), filename)
-    _log.info(f"Preparing {to_upload} into {filepath}")
+    _log.debug(f"Preparing {to_upload} into {filepath}")
     _log.info("This may take time depending on the amont of data")
 
     # TODO: check if btrfs is available

@@ -2,6 +2,7 @@
 
 import logging
 import logging.handlers
+from typing import Sequence, TextIO
 import coloredlogs
 import os
 import stat
@@ -11,104 +12,155 @@ import tempfile
 import btrfs
 import argparse
 
+
+from humanize import naturalsize
 import pyinputplus as pyin
 
+from contextlib import suppress
+from dataclasses import dataclass
 from storage import only_stored, upload
 from business import (
-    SnapshotsDifference,
     UnexpectedSnapshotStorageLayout,
     prepare_content_to_upload_to_file,
     compute_snapshot_to_upload,
     ContentToUpload,
 )
 
-from ansi.advanced import print_lines
+from ansi.advanced import print_lines as ansi_print_lines
 from ansi import colors
-
-from exceptions import ProgrammingError
 
 
 _log = logging.getLogger(__name__)
-_interactive = sys.stdin.isatty()
-_syslog_socket = "/dev/log"
+_SYSLOG_SOCKET = "/dev/log"
 
 
-def _look_for_archived_snapshots(ro_snapshots, container_name, verbose):
+@dataclass
+class Ctx:
+    """Context of script execution"""
+
+    path: str
+    verbose: bool
+    container_name: str
+    temp_dir_name: str
+    use_syslog: bool
+    is_interactive: bool
+
+    def supports_fancy_output(self) -> bool:
+        """Does the script execution context allows for fancy ansi escape code"""
+        return self.is_interactive and not self.use_syslog
+
+
+def _print_line(lines: Sequence[str], ctx: Ctx):
+    """Wraps ansi.print_lines with setup specific to the script execution"""
+    append_only = not ctx.supports_fancy_output() or ctx.verbose
+    return ansi_print_lines(
+        lines=lines,
+        append_only=append_only,
+        file=sys.stderr,
+        printfn=lambda line, file: _log.info(line),
+    )
+
+
+def _in_green(s: str, ctx: Ctx):
+    if not ctx.supports_fancy_output():
+        return s
+    colors.in_green(s)
+
+
+def _in_red(s: str, ctx: Ctx):
+    if not ctx.supports_fancy_output():
+        return s
+    colors.in_red(s)
+
+
+def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
     """Look for archived snapshots in storage"""
     lines = [s.rel_path for s in ro_snapshots]
+    lines += [f"Requesting Web Archive... ⏳"]
     archived_snapshots = []
-    with print_lines(lines, append_only=verbose, printfn=_log.info) as printer:
-        lines.append(f"Requesting Web Archive... ⏳")
-        printer.reprint(lines)
+    with _print_line(lines, ctx) as printer:
 
-        archived_snapshots = only_stored(ro_snapshots, container_name)
+        archived_snapshots = only_stored(ro_snapshots, ctx.container_name)
 
-        in_cloud_str = f'{colors.in_green("in ☁️")}'
-        not_in_cloud_str = f'{colors.in_red("not in ☁️")}'
+        in_cloud_str = f'{_in_green("in ☁️", ctx)}'
+        not_in_cloud_str = f'{_in_red("not in ☁️", ctx)}'
         lines = [
             f"{s.rel_path}... {in_cloud_str if s in archived_snapshots else not_in_cloud_str}"
             for s in ro_snapshots
         ]
         printer.reprint(lines)
+
     return archived_snapshots
 
 
-def _ask_preparing(to_upload: ContentToUpload):
+def _ask_yes_no_question(question: str, ctx: Ctx, default: bool = False):
+    """
+    Prompt a yes/no question to stderr and read/parse user response.
+    If script is non-interactive, then it prompt the question
+    with the default answer and proceed without user input
+    """
+    default_str = "yes" if default else "no"
+    suffix = "[Y/n]" if default else "[y/N]"
 
-    if not _interactive:
-        return True
-
-    question = ""
-    if to_upload == None:
-        return True
-    if isinstance(to_upload, btrfs.Snapshot):
-        question = f"Prepare whole snapshot {to_upload}? [y/N]"
-    elif isinstance(to_upload, SnapshotsDifference):
-        question = f"Prepare changes between {to_upload.parent} and {to_upload.snapshot}? [y/N] "
+    prompt_str = f"{question} {suffix} "
+    answer = default_str
+    if ctx.is_interactive:
+        print(prompt_str, end="", file=sys.stderr)
+        answer = pyin.inputYesNo(blank=True, default=default_str)
     else:
-        raise ProgrammingError
+        print(f"{prompt_str} {default_str}", file=sys.stderr)
 
-    response = pyin.inputYesNo(prompt=question, blank=True, default="no")
-    return response == "yes"
+    answer = answer or default_str
 
-
-def _ask_uploading(filepath: str) -> bool:
-
-    if not _interactive:
-        return True
-
-    question = f"Upload file {filepath} of size {os.path.getsize(filepath)}B? [y/N] "
-    response = pyin.inputYesNo(prompt=question, blank=True, default="no")
-    return response == "yes"
+    return answer == "yes"
 
 
-def _ask_press_enter():
+def _ask_preparing(to_upload: ContentToUpload, ctx: Ctx):
+    return _ask_yes_no_question(f"Prepare {str(to_upload)}?", ctx=ctx, default=True)
 
-    if not _interactive:
+
+def _ask_uploading(to_upload: ContentToUpload, filepath: str, ctx: Ctx) -> bool:
+    size = naturalsize(os.path.getsize(filepath))
+    return _ask_yes_no_question(
+        f"Upload backup of {str(to_upload)} ({size}) to container '{ctx.container_name}'?",
+        ctx=ctx,
+        default=False,
+    )  # TODO condition with dry run
+
+
+def _ask_press_enter(ctx: Ctx):
+
+    if not ctx.is_interactive:
         return
 
-    _log.info("Press enter to finish")
+    print("Press enter to exit.", file=sys.stderr, end="", flush=True)
     next(sys.stdin)
 
 
-def _configure_logging(verbose: bool, use_syslog: bool):
+def _configure_logging(context: Ctx):
+    verbose = context.verbose
+    use_syslog = context.use_syslog
 
-    level = logging.INFO if not verbose else logging.DEBUG
-    syslog_socket_ok = True
-    try:
-        stat.S_ISSOCK(os.stat(_syslog_socket).st_mode)
-    except:
-        syslog_socket_ok = False
+    def _formatter(stream: TextIO):
+        return (
+            coloredlogs.ColoredFormatter("%(message)s")
+            if stream.isatty()
+            else logging.Formatter("%(levelname)s - %(message)s")
+        )
+
+    level = logging.DEBUG if verbose else logging.INFO
+    syslog_socket_ok = False
+    with suppress(BaseException):  # On purpose.
+        syslog_socket_ok = stat.S_ISSOCK(os.stat(_SYSLOG_SOCKET).st_mode)
 
     handler = None
     if use_syslog and syslog_socket_ok:
-        handler = logging.handlers.SysLogHandler(address=_syslog_socket)
+        handler = logging.handlers.SysLogHandler(address=_SYSLOG_SOCKET)
     else:
-        format = "%(message)s"
-        formatter = coloredlogs.ColoredFormatter(format)
-        stream = logging.StreamHandler()
-        stream.setFormatter(formatter)
-        handler = stream  # type: ignore
+        stream_handler = logging.StreamHandler()
+        formatter = _formatter(stream_handler.stream)  # type: ignore
+        stream_handler.setFormatter(formatter)
+        handler = stream_handler  # type: ignore
 
     handler.setLevel(level)  # type: ignore
     logging.root.setLevel(level)
@@ -121,37 +173,37 @@ def _configure_logging(verbose: bool, use_syslog: bool):
 
     if use_syslog and not syslog_socket_ok:
         _log.warning(
-            f"Impossible to use syslogd daemon (using '{_syslog_socket} socket'). Falling back to stdout logging."
+            f"Impossible to use syslogd daemon (using '{_SYSLOG_SOCKET} socket'). Falling back to stdout logging."
         )
 
 
-def process(path_, container, tmpdirname, verbose):
+def process(ctx: Ctx):
 
-    snapshots = [x for x in btrfs.find_ro_snapshots_of(path_)]
+    snapshots = [x for x in btrfs.find_ro_snapshots_of(ctx.path)]
 
     if not snapshots:
-        _log.info(f"No readonly snapshots exists for {path_}")
+        _log.info(f"No readonly snapshots exists for {ctx.path}")
         return
 
-    archived_snapshots = _look_for_archived_snapshots(snapshots, container, verbose)
+    archived_snapshots = _look_for_archived_snapshots(snapshots, ctx)
     to_upload = compute_snapshot_to_upload(snapshots, archived_snapshots)
     if to_upload is None:
         _log.info("Everything is already up to date.")
         return
 
-    consent = _ask_preparing(to_upload)
+    consent = _ask_preparing(to_upload, ctx=ctx)
     if not consent:
         _log.info("You refused, bybye")
         return
 
-    filepath = prepare_content_to_upload_to_file(to_upload, tmpdirname)
+    filepath = prepare_content_to_upload_to_file(to_upload, ctx.temp_dir_name)
 
-    consent = _ask_uploading(filepath)
+    consent = _ask_uploading(to_upload, filepath, ctx=ctx)
     if not consent:
-        _log.info("Okay, bybye")
+        _log.info("You refused, bybye")
         return
 
-    upload(filepath=filepath, container_name=container)
+    upload(filepath=filepath, container_name=ctx.container_name)
     _log.info(f"Uploaded {filepath}")
 
 
@@ -176,7 +228,7 @@ def main():
         "--syslog",
         dest="syslog",
         type=bool,
-        help=f"Log to local syslogd socket '{_syslog_socket}'",
+        help=f"Log to local syslogd socket '{_SYSLOG_SOCKET}'",
         const=True,
         default=False,
         nargs="?",
@@ -192,24 +244,26 @@ def main():
     )
     args = parser.parse_args()
 
-    path = os.path.abspath(args.path)
-    verbose = args.verbose
-    container_name = args.container_name
-    work_dir = args.work_dir
-    use_syslog = args.syslog
+    with tempfile.TemporaryDirectory(dir=args.work_dir) as tmpdirname:
 
-    _configure_logging(verbose=verbose, use_syslog=use_syslog)
+        ctx = Ctx(
+            path=os.path.abspath(args.path),
+            verbose=args.verbose,
+            container_name=args.container_name,
+            temp_dir_name=tmpdirname,
+            use_syslog=args.syslog,
+            is_interactive=(sys.stdin.isatty() and sys.stderr.isatty()),
+        )
 
-    if not _interactive:
-        _log.debug(f"Uninteractive mode")
+        _configure_logging(ctx)
+        if not ctx.is_interactive:
+            _log.debug("Non-interactive mode")
 
-    _log.debug(f"Using storage container name {container_name}")
-    _log.debug(f"path: {path}")
-
-    with tempfile.TemporaryDirectory(dir=work_dir) as tmpdirname:
-        _log.debug(f"Using working directory {tmpdirname}")
-        process(path, container=container_name, tmpdirname=tmpdirname, verbose=verbose)
-        _ask_press_enter()
+        _log.debug(f"Using storage container name {ctx.container_name}")
+        _log.debug(f"path: {ctx.path}")
+        _log.debug(f"Using working directory {ctx.temp_dir_name}")
+        process(ctx)
+        _ask_press_enter(ctx)
 
 
 if __name__ == "__main__":
