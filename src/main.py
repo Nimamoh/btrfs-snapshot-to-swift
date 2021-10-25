@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
 import logging
+import logging.handlers
+from typing import Optional
 import coloredlogs
 import os
+import stat
 import sys
 import tempfile
 
@@ -27,6 +30,8 @@ from exceptions import ProgrammingError
 
 
 _log = logging.getLogger(__name__)
+_interactive = sys.stdin.isatty()
+_syslog_socket = "/dev/log"
 
 
 def _look_for_archived_snapshots(ro_snapshots, container_name, verbose):
@@ -68,6 +73,37 @@ def _ask_uploading(filepath: str) -> bool:
     question = f"Upload file {filepath} of size {os.path.getsize(filepath)}B? [y/N]"
     response = pyin.inputYesNo(prompt=question, blank=True, default="no")
     return response == "yes"
+
+def _configure_logging(verbose: bool, use_syslog: bool):
+
+    level = logging.INFO if not verbose else logging.DEBUG
+    syslog_socket_ok = True
+    try:
+        stat.S_ISSOCK(os.stat(_syslog_socket).st_mode)
+    except:
+        syslog_socket_ok = False
+
+    handler = None 
+    if use_syslog and syslog_socket_ok:
+        handler = logging.handlers.SysLogHandler(address=_syslog_socket)
+    else:
+        format = "%(message)s"
+        formatter = coloredlogs.ColoredFormatter(format)
+        stream = logging.StreamHandler()
+        stream.setFormatter(formatter)
+        handler = stream # type: ignore
+
+    handler.setLevel(level) # type: ignore
+    logging.root.setLevel(level)
+    logging.root.addHandler(handler) #type: ignore
+
+    # Disabling component which are too verbose
+    logging.getLogger("keystoneclient").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)  #
+    logging.getLogger("swiftclient").setLevel(logging.WARNING)  #
+
+    if use_syslog and not syslog_socket_ok:
+        _log.warning(f"Impossible to use syslogd daemon (using '{_syslog_socket} socket'). Falling back to stdout logging.")
 
 
 def process(path_, container, tmpdirname, verbose):
@@ -118,6 +154,15 @@ def main():
         required=False,
     )
     parser.add_argument(
+        "--syslog",
+        dest="syslog",
+        type=bool,
+        help=f"Log to local syslogd socket '{_syslog_socket}'",
+        const=True,
+        default=False,
+        nargs="?"
+    )
+    parser.add_argument(
         "-v",
         dest="verbose",
         type=bool,
@@ -128,26 +173,16 @@ def main():
     )
     args = parser.parse_args()
 
-    level = logging.INFO
-    format = "%(message)s"
-
     path = os.path.abspath(args.path)
     verbose = args.verbose
     container_name = args.container_name
     work_dir = args.work_dir
+    use_syslog = args.syslog
 
-    if args.verbose:
-        level = logging.DEBUG
-        format = "%(asctime)s - %(name)-12s %(levelname)-8s %(message)s"
-    formatter = coloredlogs.ColoredFormatter(format)
-    stream = logging.StreamHandler()
-    stream.setLevel(level)
-    stream.setFormatter(formatter)
-    logging.root.setLevel(level)
-    logging.root.addHandler(stream)
-    logging.getLogger("keystoneclient").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)  #
-    logging.getLogger("swiftclient").setLevel(logging.WARNING)  #
+    _configure_logging(verbose = verbose, use_syslog=use_syslog)
+
+    if not _interactive:
+        _log.debug(f"Uninteractive mode")
 
     _log.debug(f"Using storage container name {container_name}")
     _log.debug(f"path: {path}")
