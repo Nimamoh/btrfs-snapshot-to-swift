@@ -2,7 +2,6 @@
 
 import logging
 import logging.handlers
-from typing import Optional
 import coloredlogs
 import os
 import stat
@@ -55,13 +54,17 @@ def _look_for_archived_snapshots(ro_snapshots, container_name, verbose):
 
 
 def _ask_preparing(to_upload: ContentToUpload):
+
+    if not _interactive:
+        return True
+
     question = ""
     if to_upload == None:
         return True
     if isinstance(to_upload, btrfs.Snapshot):
         question = f"Prepare whole snapshot {to_upload}? [y/N]"
     elif isinstance(to_upload, SnapshotsDifference):
-        question = f"Prepare changes between {to_upload.parent} and {to_upload.snapshot}? [y/N]"
+        question = f"Prepare changes between {to_upload.parent} and {to_upload.snapshot}? [y/N] "
     else:
         raise ProgrammingError
 
@@ -70,9 +73,23 @@ def _ask_preparing(to_upload: ContentToUpload):
 
 
 def _ask_uploading(filepath: str) -> bool:
-    question = f"Upload file {filepath} of size {os.path.getsize(filepath)}B? [y/N]"
+
+    if not _interactive:
+        return True
+
+    question = f"Upload file {filepath} of size {os.path.getsize(filepath)}B? [y/N] "
     response = pyin.inputYesNo(prompt=question, blank=True, default="no")
     return response == "yes"
+
+
+def _ask_press_enter():
+
+    if not _interactive:
+        return
+
+    _log.info("Press enter to finish")
+    next(sys.stdin)
+
 
 def _configure_logging(verbose: bool, use_syslog: bool):
 
@@ -83,7 +100,7 @@ def _configure_logging(verbose: bool, use_syslog: bool):
     except:
         syslog_socket_ok = False
 
-    handler = None 
+    handler = None
     if use_syslog and syslog_socket_ok:
         handler = logging.handlers.SysLogHandler(address=_syslog_socket)
     else:
@@ -91,11 +108,11 @@ def _configure_logging(verbose: bool, use_syslog: bool):
         formatter = coloredlogs.ColoredFormatter(format)
         stream = logging.StreamHandler()
         stream.setFormatter(formatter)
-        handler = stream # type: ignore
+        handler = stream  # type: ignore
 
-    handler.setLevel(level) # type: ignore
+    handler.setLevel(level)  # type: ignore
     logging.root.setLevel(level)
-    logging.root.addHandler(handler) #type: ignore
+    logging.root.addHandler(handler)  # type: ignore
 
     # Disabling component which are too verbose
     logging.getLogger("keystoneclient").setLevel(logging.WARNING)
@@ -103,7 +120,9 @@ def _configure_logging(verbose: bool, use_syslog: bool):
     logging.getLogger("swiftclient").setLevel(logging.WARNING)  #
 
     if use_syslog and not syslog_socket_ok:
-        _log.warning(f"Impossible to use syslogd daemon (using '{_syslog_socket} socket'). Falling back to stdout logging.")
+        _log.warning(
+            f"Impossible to use syslogd daemon (using '{_syslog_socket} socket'). Falling back to stdout logging."
+        )
 
 
 def process(path_, container, tmpdirname, verbose):
@@ -160,7 +179,7 @@ def main():
         help=f"Log to local syslogd socket '{_syslog_socket}'",
         const=True,
         default=False,
-        nargs="?"
+        nargs="?",
     )
     parser.add_argument(
         "-v",
@@ -179,7 +198,7 @@ def main():
     work_dir = args.work_dir
     use_syslog = args.syslog
 
-    _configure_logging(verbose = verbose, use_syslog=use_syslog)
+    _configure_logging(verbose=verbose, use_syslog=use_syslog)
 
     if not _interactive:
         _log.debug(f"Uninteractive mode")
@@ -190,9 +209,7 @@ def main():
     with tempfile.TemporaryDirectory(dir=work_dir) as tmpdirname:
         _log.debug(f"Using working directory {tmpdirname}")
         process(path, container=container_name, tmpdirname=tmpdirname, verbose=verbose)
-
-        _log.info("Press enter to finish")
-        next(sys.stdin)
+        _ask_press_enter()
 
 
 if __name__ == "__main__":
