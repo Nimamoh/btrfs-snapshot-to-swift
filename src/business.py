@@ -8,8 +8,16 @@ from storage import compute_storage_filename
 
 import os
 import logging
+import subprocess
+from subprocess import STDOUT, PIPE
 
 _log = logging.getLogger(__name__)
+
+
+class PrepareContentEx(Exception):
+    """Raised if prepare_content_to_upload_to_file failed"""
+
+    pass
 
 
 class UnexpectedSnapshotStorageLayout(Exception):
@@ -82,8 +90,37 @@ def compute_snapshot_to_upload(
 
 
 def prepare_content_to_upload_to_file(to_upload: ContentToUpload, basedir: str):
-    """Prepare the content to upload to a local file"""
+    """
+    Prepare the content to upload to a local file
+    Args:
+      to_upload (ContentToUpload): describe the content to ultimately upload, 
+        that we will be turning in a file beforehand
+      basedir (basedir): directory in which we will store the file. 
+        Consider that change to existing files in that directory may happen.
+    Returns:
+      str: the absolute path in which we stored the file to upload
+    Raises:
+      PrepareContentEx
+    """
+    basedir = os.path.abspath(basedir)
     filename = compute_storage_filename(to_upload)
-    filepath = os.path.join(basedir, filename)
+    filepath = os.path.join(os.path.abspath(basedir), filename)
     _log.info(f"Preparing {to_upload} into {filepath}")
-    _log.warning("Not implemented yet")
+    _log.info("This may take time depending on the amont of data")
+
+    # TODO: check if btrfs is available
+    # status bar?
+    cmd = []
+    cmd += "btrfs send -q -f".split(" ")
+    cmd += [filepath]
+    if isinstance(to_upload, SnapshotsDifference):
+        cmd += ["-p", to_upload.parent.abs_path, to_upload.snapshot.abs_path]
+    elif isinstance(to_upload, Snapshot):
+        cmd += [to_upload.abs_path]
+
+    _log.debug(f"Will run: {cmd}")
+    completed = subprocess.run(cmd, stdout=PIPE, stderr=STDOUT)
+    if completed.returncode != 0:
+        raise PrepareContentEx(completed.stdout.decode())
+
+    return filepath

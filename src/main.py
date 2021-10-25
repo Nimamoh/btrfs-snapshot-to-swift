@@ -11,9 +11,10 @@ import argparse
 
 import pyinputplus as pyin
 
-from storage import only_stored
+from storage import only_stored, upload
 from business import (
     SnapshotsDifference,
+    UnexpectedSnapshotStorageLayout,
     prepare_content_to_upload_to_file,
     compute_snapshot_to_upload,
     ContentToUpload,
@@ -48,21 +49,14 @@ def _look_for_archived_snapshots(ro_snapshots, container_name, verbose):
     return archived_snapshots
 
 
-def _ask_uploading(to_upload: ContentToUpload):
-    """
-    Ask user for uploading snapshot
-    Args:
-      to_send: snapshot to send
-    Returns:
-      True if user accept, False otherwise
-    """
+def _ask_preparing(to_upload: ContentToUpload):
     question = ""
     if to_upload == None:
         return True
     if isinstance(to_upload, btrfs.Snapshot):
-        question = f"Uploading whole snapshot {to_upload}? [y/N]"
+        question = f"Prepare whole snapshot {to_upload}? [y/N]"
     elif isinstance(to_upload, SnapshotsDifference):
-        question = f"Uploading changes between {to_upload.parent} and {to_upload.snapshot}? [y/N]"
+        question = f"Prepare changes between {to_upload.parent} and {to_upload.snapshot}? [y/N]"
     else:
         raise ProgrammingError
 
@@ -70,26 +64,43 @@ def _ask_uploading(to_upload: ContentToUpload):
     return response == "yes"
 
 
-def main(path_, container, tmpdirname, verbose):
+def _ask_uploading(filepath: str) -> bool:
+    question = f"Upload file {filepath} of size {os.path.getsize(filepath)}B? [y/N]"
+    response = pyin.inputYesNo(prompt=question, blank=True, default="no")
+    return response == "yes"
+
+
+def process(path_, container, tmpdirname, verbose):
 
     snapshots = [x for x in btrfs.find_ro_snapshots_of(path_)]
 
     if not snapshots:
         _log.info(f"No readonly snapshots exists for {path_}")
-        sys.exit()
+        return
 
     archived_snapshots = _look_for_archived_snapshots(snapshots, container, verbose)
-
     to_upload = compute_snapshot_to_upload(snapshots, archived_snapshots)
-    consent = _ask_uploading(to_upload)
+    if to_upload is None:
+        _log.info("Everything is already up to date.")
+        return
+
+    consent = _ask_preparing(to_upload)
     if not consent:
         _log.info("You refused, bybye")
         return
-    prepare_content_to_upload_to_file(to_upload, tmpdirname)
+
+    filepath = prepare_content_to_upload_to_file(to_upload, tmpdirname)
+
+    consent = _ask_uploading(filepath)
+    if not consent:
+        _log.info("Okay, bybye")
+        return
+
+    upload(filepath=filepath, container_name=container)
+    _log.info(f"Uploaded {filepath}")
 
 
-if __name__ == "__main__":
-
+def main():
     parser = argparse.ArgumentParser(description="List snapshots of subvolume")
     parser.add_argument("path", type=str, help="Path of subvolume")
     parser.add_argument(
@@ -143,4 +154,23 @@ if __name__ == "__main__":
 
     with tempfile.TemporaryDirectory(dir=work_dir) as tmpdirname:
         _log.debug(f"Using working directory {tmpdirname}")
-        main(path, container=container_name, tmpdirname=tmpdirname, verbose=verbose)
+        process(path, container=container_name, tmpdirname=tmpdirname, verbose=verbose)
+
+        _log.info("Press enter to finish")
+        next(sys.stdin)
+
+
+if __name__ == "__main__":
+    status = 0
+    try:
+        main()
+    except UnexpectedSnapshotStorageLayout as e:
+        _log.error(
+            f"Layout of files is not a subset of local snapshots. Please read the documentation."
+        )
+        status = -1
+    except:
+        _log.exception("Oops, an error occured. Here is what went wrong:")
+        status = -1
+
+    sys.exit(status)

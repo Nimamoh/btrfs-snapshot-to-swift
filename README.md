@@ -2,6 +2,15 @@
 
 Tools for automating pushing btrfs snapshot to [cloud archive cold storage service](https://www.ovhcloud.com/fr/public-cloud/cloud-archive/)
 
+## Next TODO
+
+- [] Optionally crypt content to be sent.
+- [] consent question to logging.
+- [] logging to file.
+- [] uninteractive mode.
+- [] Safeguard before writing file / upload to web archive.
+- [] check existance of cli tool we use.
+
 ## Dev notes
 
 ### OpenShift credentials

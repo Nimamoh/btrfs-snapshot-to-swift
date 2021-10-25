@@ -2,14 +2,15 @@
 storage module is about archive storage routines
 """
 import logging
+import os
 from typing import Union
 
-from swiftclient.service import SwiftService
+from swiftclient.service import SwiftService, SwiftUploadObject
 
 from btrfs import Snapshot, SnapshotsDifference
 from exceptions import ProgrammingError
 
-log = logging.getLogger(__name__)
+_log = logging.getLogger(__name__)
 
 
 def _compute_common_prefix(str_list: list[str]):
@@ -63,7 +64,7 @@ def _sanitize_storage_filename(name: str):
     Raises:
       ValueError if we cannot sanitize filename garanteeing collision free
     """
-    slash_surrogate='\\x2f'
+    slash_surrogate = "\\x2f"
     if "\x00" in name:
         raise ValueError("Null character is forbidden in unix filename")
     if slash_surrogate in name:
@@ -82,18 +83,30 @@ def only_stored(ro_snapshots: list[Snapshot], container_name: str) -> list[Snaps
     """
     storage_filename_of_snapshots = [compute_storage_filename(s) for s in ro_snapshots]
     prefix = _compute_common_prefix(storage_filename_of_snapshots)
-    log.debug(f'Search storage for files with prefix "{prefix}"')
+    _log.debug(f'Search storage for files with prefix "{prefix}"')
 
     container_item_names = []
     with SwiftService() as swift:
         list_page_gen = swift.list(container=container_name, options={"prefix": prefix})
         container_item_names = _parse_list_page_gen(list_page_gen)
 
-    log.debug(f"Found {len(container_item_names)} files.")
+    _log.debug(f"Found {len(container_item_names)} files.")
     result = [
         s for s in ro_snapshots if compute_storage_filename(s) in container_item_names
     ]
-    log.debug(
+    _log.debug(
         f"Filtering... Found {len(result)} files corresponding to actual snapshots."
     )
     return result
+
+
+def upload(filepath: str, container_name: str):
+    """Uploads file to container"""
+
+    upload_obj = SwiftUploadObject(
+        source=filepath, object_name=os.path.basename(filepath)
+    )
+
+    with SwiftService() as swift:
+        for result in swift.upload(container=container_name, objects=[upload_obj]):
+            _log.debug(f"Result of upload: {result}")
