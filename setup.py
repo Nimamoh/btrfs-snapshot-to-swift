@@ -26,6 +26,7 @@ setup(
         'pyinputplus',
         'coloredlogs',
         'humanize',
+        'humanfriendly',
         'ansi',
     ],
     extras_require={

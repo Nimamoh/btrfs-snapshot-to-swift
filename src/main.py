@@ -15,7 +15,8 @@ import argparse
 
 
 from humanize import naturalsize
-from humanize import naturaldelta
+from humanize import precisedelta
+from humanfriendly import parse_size
 import pyinputplus as pyin
 
 from contextlib import suppress
@@ -47,6 +48,7 @@ class Ctx:
     use_syslog: bool
     is_interactive: bool
     dry_run: bool
+    upload_size_limit: int
 
     def supports_fancy_output(self) -> bool:
         """Does the script execution context allows for fancy ansi escape code"""
@@ -108,7 +110,7 @@ def _prepare_snapshot_to_upload(to_upload, ctx):
         for progress_line in preparator.prepare():
             printer.reprint([progress_line])
 
-        elapsed = naturaldelta(time.time() - start)
+        elapsed = precisedelta(time.time() - start)
         size = naturalsize(os.path.getsize(filepath))
         printer.reprint([f"Preparation is {size}, took {elapsed}. Ready to upload 💪"])
 
@@ -219,6 +221,13 @@ def process(ctx: Ctx):
         return
 
     filepath = _prepare_snapshot_to_upload(to_upload, ctx)
+    filesize = os.path.getsize(filepath)
+
+    if filesize > ctx.upload_size_limit:
+        limit = naturalsize(ctx.upload_size_limit)
+        size = naturalsize(filesize)
+        _log.warning(f"File is over the limit of {limit} (file is {size}). Exiting.")
+        return
 
     if not ctx.dry_run:
         consent = _ask_uploading(to_upload, filepath, ctx=ctx)
@@ -242,6 +251,7 @@ def main(args):
             use_syslog=args.syslog,
             is_interactive=(sys.stdin.isatty() and sys.stderr.isatty()),
             dry_run=args.dry_run,
+            upload_size_limit=args.upload_size_limit,
         )
         _configure_logging(ctx)
 
@@ -276,9 +286,16 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
+        "--upload-size-limit",
+        help="Prevent uploading file over this size.",
+        dest="upload_size_limit",
+        type=parse_size,
+        default="1EiB",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help=f"Dry run mode. Do everything except upload.",
+        help="Dry run mode. Do everything except upload.",
     )
     parser.add_argument(
         "--syslog",
