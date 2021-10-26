@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from storage import only_stored, upload
 from business import (
     UnexpectedSnapshotStorageLayout,
-    prepare_content_to_upload_to_file,
+    PrepareContent,
     compute_snapshot_to_upload,
     ContentToUpload,
 )
@@ -64,13 +64,13 @@ def _print_line(lines: Sequence[str], ctx: Ctx):
 def _in_green(s: str, ctx: Ctx):
     if not ctx.supports_fancy_output():
         return s
-    colors.in_green(s)
+    return colors.in_green(s)
 
 
 def _in_red(s: str, ctx: Ctx):
     if not ctx.supports_fancy_output():
         return s
-    colors.in_red(s)
+    return colors.in_red(s)
 
 
 def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
@@ -78,12 +78,13 @@ def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
     lines = [s.rel_path for s in ro_snapshots]
     lines += [f"Requesting Web Archive... ⏳"]
     archived_snapshots = []
+
     with _print_line(lines, ctx) as printer:
 
         archived_snapshots = only_stored(ro_snapshots, ctx.container_name)
 
-        in_cloud_str = f'{_in_green("in ☁️", ctx)}'
-        not_in_cloud_str = f'{_in_red("not in ☁️", ctx)}'
+        in_cloud_str = _in_green("in ☁️", ctx)
+        not_in_cloud_str = _in_red("not in ☁️", ctx)
         lines = [
             f"{s.rel_path}... {in_cloud_str if s in archived_snapshots else not_in_cloud_str}"
             for s in ro_snapshots
@@ -91,6 +92,17 @@ def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
         printer.reprint(lines)
 
     return archived_snapshots
+
+
+def _prepare_snapshot_to_upload(to_upload, ctx):
+    """Prepare snapshot to upload in a local file"""
+    preparator = PrepareContent(to_upload, ctx.temp_dir_name)
+    filepath = preparator.target_path()
+    with _print_line(["Initializing preparation ⏳"], ctx) as printer:
+        for progress_line in preparator.prepare(ratelimit="100"):
+            printer.reprint([progress_line])
+        printer.reprint(["Preparation complete. Ready to upload 💪"])
+    return filepath
 
 
 def _ask_yes_no_question(question: str, ctx: Ctx, default: bool = False):
@@ -196,7 +208,7 @@ def process(ctx: Ctx):
         _log.info("You refused, bybye")
         return
 
-    filepath = prepare_content_to_upload_to_file(to_upload, ctx.temp_dir_name)
+    filepath = _prepare_snapshot_to_upload(to_upload, ctx)
 
     consent = _ask_uploading(to_upload, filepath, ctx=ctx)
     if not consent:

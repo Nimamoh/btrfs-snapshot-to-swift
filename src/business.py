@@ -2,22 +2,18 @@
 Module related to business logic.
 """
 
-from typing import Optional, Sequence, Union
+from typing import Iterator, Optional, Sequence, Union
 from btrfs import Snapshot, SnapshotsDifference
 from storage import compute_storage_filename
+from exceptions import ProgrammingError
 
 import os
 import logging
 import subprocess
-from subprocess import STDOUT, PIPE
+import shutil
+import contextlib
 
 _log = logging.getLogger(__name__)
-
-
-class PrepareContentEx(Exception):
-    """Raised if prepare_content_to_upload_to_file failed"""
-
-    pass
 
 
 class UnexpectedSnapshotStorageLayout(Exception):
@@ -89,38 +85,99 @@ def compute_snapshot_to_upload(
         return SnapshotsDifference(parent=parent, snapshot=current)
 
 
-def prepare_content_to_upload_to_file(to_upload: ContentToUpload, basedir: str):
+class PrepareContentEx(Exception):
+    """Raised if PrepareContent failed"""
+
+    pass
+
+
+class PrepareContent:
     """
     Prepare the content to upload to a local file
     Args:
-      to_upload (ContentToUpload): describe the content to ultimately upload, 
+      to_upload (ContentToUpload): describe the content to ultimately upload,
         that we will be turning in a file beforehand
-      basedir (basedir): directory in which we will store the file. 
+      basedir (basedir): directory in which we will store the file.
         Consider that change to existing files in that directory may happen.
     Returns:
       str: the absolute path in which we stored the file to upload
     Raises:
       PrepareContentEx
     """
-    basedir = os.path.abspath(basedir)
-    filename = compute_storage_filename(to_upload)
-    filepath = os.path.join(os.path.abspath(basedir), filename)
-    _log.debug(f"Preparing {to_upload} into {filepath}")
-    _log.info("This may take time depending on the amont of data")
 
-    # TODO: check if btrfs is available
-    # status bar?
-    cmd = []
-    cmd += "btrfs send -q -f".split(" ")
-    cmd += [filepath]
-    if isinstance(to_upload, SnapshotsDifference):
-        cmd += ["-p", to_upload.parent.abs_path, to_upload.snapshot.abs_path]
-    elif isinstance(to_upload, Snapshot):
-        cmd += [to_upload.abs_path]
+    def __init__(self, content: ContentToUpload, dirname: str):
 
-    _log.debug(f"Will run: {cmd}")
-    completed = subprocess.run(cmd, stdout=PIPE, stderr=STDOUT)
-    if completed.returncode != 0:
-        raise PrepareContentEx(completed.stdout.decode())
+        self.__content = content
+        self.__dirname = os.path.abspath(dirname)
+        self.__basename = compute_storage_filename(self.__content)
+        self.__path = os.path.join(self.__dirname, self.__basename)
+        which_btrfs = shutil.which("btrfs")
+        which_pv = shutil.which("pv")
 
-    return filepath
+        if not os.path.isdir(self.__dirname):
+            raise PrepareContentEx(f"{self.__dirname} does not exist.")
+        if os.path.exists(self.__path):
+            raise PrepareContentEx(f"{self.__path} already exists.")
+        if not which_btrfs:
+            raise PrepareContentEx(f"btrfs must be in path!")
+
+        self.__which_btrfs: str = which_btrfs
+        self.__which_pv = which_pv
+
+    def target_path(self) -> str:
+        """Path in which the file is/will be stored in the preparation"""
+        return self.__path
+
+
+    def prepare(self, ratelimit = None) -> Iterator[str]:
+        """
+        Prepare the content to the target_path.
+        It uses btrfs send
+        It is a generator which report completion progress if possible (using pv).
+        Completion progress is setup at 1 report / second.
+
+        Args:
+          ratelimit: ratelimit of transfer speed in quantity per seconds. 
+            Accepts input like 100 (100B/s), 1K (1K/s), 1M, 1G...
+        """
+        #fmt:off
+        with open(self.__path, "x") as file, self._send_process(file) as send, self._pv_process(send, file, ratelimit) as pv:
+        #fmt:on
+            processes = [send]
+
+            if pv is not None:
+                processes += [pv]
+                for line in pv.stderr:
+                    yield line.rstrip()
+
+            ret = [p.wait() for p in processes]
+            if any([s != 0 for s in ret]):
+                raise PrepareContentEx("Error happened during btrfs send")
+    
+    def _send_process(self, file):
+        content = self.__content
+        cmd = [self.__which_btrfs, "send"]
+        if isinstance(content, SnapshotsDifference):
+            cmd += ["-p", content.parent.abs_path, content.snapshot.abs_path]
+        elif isinstance(content, Snapshot):
+            cmd += [content.abs_path]
+        else:
+            raise ProgrammingError
+
+        dest = file if not self.__which_pv else subprocess.PIPE
+        return subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=dest)
+
+    def _pv_process(self, send_process, file, ratelimit):
+        if not self.__which_pv:
+            return contextlib.nullcontext()
+
+        cmd = [self.__which_pv, "-i", "1", "-f"]
+        if ratelimit:
+            cmd += ["-L", ratelimit]
+        return subprocess.Popen(
+            cmd,
+            stdin=send_process.stdout,
+            stderr=subprocess.PIPE,
+            stdout=file,
+            text=True,
+        )

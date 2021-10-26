@@ -3,8 +3,9 @@ from btrfs import Snapshot
 import pytest
 from itertools import repeat
 from uuid import uuid4
+from tempfile import TemporaryDirectory
 
-from business import SnapshotsDifference, compute_snapshot_to_upload
+from business import PrepareContent, SnapshotsDifference, compute_snapshot_to_upload
 from business import UnexpectedSnapshotStorageLayout
 
 
@@ -22,20 +23,29 @@ def _snapshot_gen():
         fs_uuid=_static_uuids[1],
         rel_path="/snapshots/2",
         abs_path="/fs/snapshots/2",
-        otime=0.0,
+        otime=1.0,
     )
     yield Snapshot(
         fs_uuid=_static_uuids[2],
         rel_path="/snapshots/3",
         abs_path="/fs/snapshots/3",
-        otime=0.0,
+        otime=2.0,
     )
     yield Snapshot(
         fs_uuid=_static_uuids[3],
         rel_path="/snapshots/4",
         abs_path="/fs/snapshots/4",
-        otime=0.0,
+        otime=3.0,
     )
+
+
+def _snapshot_diff_gen():
+    snapshots_gen = _snapshot_gen()
+    previous = None
+    for snap in snapshots_gen:
+        current = snap
+        if current and previous:
+            yield SnapshotsDifference(parent=previous, snapshot=current)
 
 
 @pytest.mark.parametrize(
@@ -104,6 +114,15 @@ def test_compute_snapshots_to_upload():
     archived = snapshots
     to_be_uploaded = compute_snapshot_to_upload(snapshots, archived)
     assert to_be_uploaded == None
+
+
+def test_prepare_content():
+
+    """Test initialization of PrepareContent."""
+    with TemporaryDirectory() as tmpdirname:
+        snapshot = next(_snapshot_gen())
+        preparator = PrepareContent(snapshot, tmpdirname)
+        assert preparator.target_path() is not None
 
 
 if __name__ == "__main__":
