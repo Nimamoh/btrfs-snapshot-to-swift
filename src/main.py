@@ -8,12 +8,14 @@ import os
 import stat
 import sys
 import tempfile
+import time
 
 import btrfs
 import argparse
 
 
 from humanize import naturalsize
+from humanize import naturaldelta
 import pyinputplus as pyin
 
 from contextlib import suppress
@@ -44,6 +46,7 @@ class Ctx:
     temp_dir_name: str
     use_syslog: bool
     is_interactive: bool
+    dry_run: bool
 
     def supports_fancy_output(self) -> bool:
         """Does the script execution context allows for fancy ansi escape code"""
@@ -96,12 +99,19 @@ def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
 
 def _prepare_snapshot_to_upload(to_upload, ctx):
     """Prepare snapshot to upload in a local file"""
+    start = time.time()
+
     preparator = PrepareContent(to_upload, ctx.temp_dir_name)
     filepath = preparator.target_path()
+
     with _print_line(["Initializing preparation ⏳"], ctx) as printer:
-        for progress_line in preparator.prepare(ratelimit="100"):
+        for progress_line in preparator.prepare():
             printer.reprint([progress_line])
-        printer.reprint(["Preparation complete. Ready to upload 💪"])
+
+        elapsed = naturaldelta(time.time() - start)
+        size = naturalsize(os.path.getsize(filepath))
+        printer.reprint([f"Preparation is {size}, took {elapsed}. Ready to upload 💪"])
+
     return filepath
 
 
@@ -136,8 +146,8 @@ def _ask_uploading(to_upload: ContentToUpload, filepath: str, ctx: Ctx) -> bool:
     return _ask_yes_no_question(
         f"Upload backup of {str(to_upload)} ({size}) to container '{ctx.container_name}'?",
         ctx=ctx,
-        default=False,
-    )  # TODO condition with dry run
+        default=True,
+    )
 
 
 def _ask_press_enter(ctx: Ctx):
@@ -210,16 +220,45 @@ def process(ctx: Ctx):
 
     filepath = _prepare_snapshot_to_upload(to_upload, ctx)
 
-    consent = _ask_uploading(to_upload, filepath, ctx=ctx)
-    if not consent:
-        _log.info("You refused, bybye")
-        return
+    if not ctx.dry_run:
+        consent = _ask_uploading(to_upload, filepath, ctx=ctx)
+        if not consent:
+            _log.info("You refused, bybye")
+            return
 
-    upload(filepath=filepath, container_name=ctx.container_name)
-    _log.info(f"Uploaded {filepath}")
+        upload(filepath=filepath, container_name=ctx.container_name)
+        _log.info(f"Uploaded {filepath}")
 
 
-def main():
+def main(args):
+
+    with tempfile.TemporaryDirectory(dir=args.work_dir) as tmpdirname:
+
+        ctx = Ctx(
+            path=os.path.abspath(args.path),
+            verbose=args.verbose,
+            container_name=args.container_name,
+            temp_dir_name=tmpdirname,
+            use_syslog=args.syslog,
+            is_interactive=(sys.stdin.isatty() and sys.stderr.isatty()),
+            dry_run=args.dry_run,
+        )
+        _configure_logging(ctx)
+
+        if ctx.dry_run:
+            _log.info("💧 Dry run, nothing will be uploaded 💧")
+
+        if not ctx.is_interactive:
+            _log.debug("Non-interactive mode")
+
+        _log.debug(f"Using storage container name {ctx.container_name}")
+        _log.debug(f"path: {ctx.path}")
+        _log.debug(f"Using working directory {ctx.temp_dir_name}")
+        process(ctx)
+        _ask_press_enter(ctx)
+
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="List snapshots of subvolume")
     parser.add_argument("path", type=str, help="Path of subvolume")
     parser.add_argument(
@@ -237,6 +276,11 @@ def main():
         required=False,
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=f"Dry run mode. Do everything except upload.",
+    )
+    parser.add_argument(
         "--syslog",
         dest="syslog",
         type=bool,
@@ -248,40 +292,14 @@ def main():
     parser.add_argument(
         "-v",
         dest="verbose",
-        type=bool,
+        action="store_true",
         help="Enable debug messages",
-        const=True,
-        default=False,
-        nargs="?",
     )
     args = parser.parse_args()
 
-    with tempfile.TemporaryDirectory(dir=args.work_dir) as tmpdirname:
-
-        ctx = Ctx(
-            path=os.path.abspath(args.path),
-            verbose=args.verbose,
-            container_name=args.container_name,
-            temp_dir_name=tmpdirname,
-            use_syslog=args.syslog,
-            is_interactive=(sys.stdin.isatty() and sys.stderr.isatty()),
-        )
-
-        _configure_logging(ctx)
-        if not ctx.is_interactive:
-            _log.debug("Non-interactive mode")
-
-        _log.debug(f"Using storage container name {ctx.container_name}")
-        _log.debug(f"path: {ctx.path}")
-        _log.debug(f"Using working directory {ctx.temp_dir_name}")
-        process(ctx)
-        _ask_press_enter(ctx)
-
-
-if __name__ == "__main__":
     status = 0
     try:
-        main()
+        main(args)
     except UnexpectedSnapshotStorageLayout as e:
         _log.error(
             f"Layout of files is not a subset of local snapshots. Please read the documentation."
