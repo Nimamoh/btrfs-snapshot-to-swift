@@ -45,6 +45,7 @@ class Ctx:
     verbose: bool
     container_name: str
     temp_dir_name: str
+    age_recipient: str
     use_syslog: bool
     is_interactive: bool
     dry_run: bool
@@ -99,11 +100,11 @@ def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
     return archived_snapshots
 
 
-def _prepare_snapshot_to_upload(to_upload, ctx):
+def _prepare_snapshot_to_upload(to_upload, ctx: Ctx):
     """Prepare snapshot to upload in a local file"""
     start = time.time()
 
-    preparator = PrepareContent(to_upload, ctx.temp_dir_name)
+    preparator = PrepareContent(to_upload, ctx.temp_dir_name, ctx.age_recipient)
     filepath = preparator.target_path()
 
     with _print_line(["Initializing preparation ⏳"], ctx) as printer:
@@ -114,6 +115,7 @@ def _prepare_snapshot_to_upload(to_upload, ctx):
         size = naturalsize(os.path.getsize(filepath))
         printer.reprint([f"Preparation is {size}, took {elapsed}. Ready to upload 💪"])
 
+    _log.debug(f"Preparation fullpath: {filepath}")
     return filepath
 
 
@@ -248,6 +250,7 @@ def main(args):
             verbose=args.verbose,
             container_name=args.container_name,
             temp_dir_name=tmpdirname,
+            age_recipient=args.age_recipient,
             use_syslog=args.syslog,
             is_interactive=(sys.stdin.isatty() and sys.stderr.isatty()),
             dry_run=args.dry_run,
@@ -296,6 +299,12 @@ if __name__ == "__main__":
         "--dry-run",
         action="store_true",
         help="Dry run mode. Do everything except upload.",
+    )
+    parser.add_argument(
+        "--age-recipient",
+        help="Enable encryption through age, using provided recipient. see https://github.com/FiloSottile/age.",
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--syslog",

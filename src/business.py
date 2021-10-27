@@ -105,14 +105,16 @@ class PrepareContent:
       PrepareContentEx
     """
 
-    def __init__(self, content: ContentToUpload, dirname: str):
+    def __init__(self, content: ContentToUpload, dirname: str, age_recipient: str):
 
         self.__content = content
         self.__dirname = os.path.abspath(dirname)
         self.__basename = compute_storage_filename(self.__content)
         self.__path = os.path.join(self.__dirname, self.__basename)
+        self.__age_recipient = age_recipient
         which_btrfs = shutil.which("btrfs")
         which_pv = shutil.which("pv")
+        which_age = shutil.which("age")
 
         if not os.path.isdir(self.__dirname):
             raise PrepareContentEx(f"{self.__dirname} does not exist.")
@@ -120,9 +122,12 @@ class PrepareContent:
             raise PrepareContentEx(f"{self.__path} already exists.")
         if not which_btrfs:
             raise PrepareContentEx(f"btrfs must be in path!")
+        if self.__age_recipient and not which_age:
+            raise PrepareContentEx(f"age must be in path!")
 
         self.__which_btrfs: str = which_btrfs
         self.__which_pv = which_pv
+        self.__which_age = which_age
 
     def target_path(self) -> str:
         """Path in which the file is/will be stored in the preparation"""
@@ -141,7 +146,12 @@ class PrepareContent:
             Accepts input like 100 (100B/s), 1K (1K/s), 1M, 1G...
         """
         #fmt:off
-        with open(self.__path, "x") as file, self._send_process(file) as send, self._pv_process(send, file, ratelimit) as pv:
+        with open(self.__path, "x") as file, \
+             self._send_process(stdout= \
+                 (subprocess.PIPE if (self.__which_pv or self.__age_recipient) else file)\
+             ) as send, \
+             self._age_process(stdin=send.stdout, stdout=subprocess.PIPE) as age, \
+             self._pv_process(stdin=(age.stdout if age else send.stdout), stdout=file, ratelimit=ratelimit) as pv:
         #fmt:on
             processes = [send]
 
@@ -154,7 +164,7 @@ class PrepareContent:
             if any([s != 0 for s in ret]):
                 raise PrepareContentEx("Error happened during btrfs send")
     
-    def _send_process(self, file):
+    def _send_process(self, stdout):
         content = self.__content
         cmd = [self.__which_btrfs, "send"]
         if isinstance(content, SnapshotsDifference):
@@ -164,10 +174,18 @@ class PrepareContent:
         else:
             raise ProgrammingError
 
-        dest = file if not self.__which_pv else subprocess.PIPE
-        return subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=dest)
+        return subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=stdout)
+    
+    def _age_process(self, stdin, stdout):
+        if not self.__age_recipient:
+            return contextlib.nullcontext()
 
-    def _pv_process(self, send_process, file, ratelimit):
+        recipient = self.__age_recipient
+        cmd = [self.__which_age, "-r", recipient]
+
+        return subprocess.Popen(cmd, stdin=stdin, stdout=stdout)
+
+    def _pv_process(self, stdin, stdout, ratelimit):
         if not self.__which_pv:
             return contextlib.nullcontext()
 
@@ -176,8 +194,8 @@ class PrepareContent:
             cmd += ["-L", ratelimit]
         return subprocess.Popen(
             cmd,
-            stdin=send_process.stdout,
+            stdin=stdin,
             stderr=subprocess.PIPE,
-            stdout=file,
+            stdout=stdout,
             text=True,
         )

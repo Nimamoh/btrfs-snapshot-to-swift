@@ -4,12 +4,14 @@ Tools for automating pushing btrfs snapshot to [cloud archive cold storage servi
 
 ## Next TODO
 
-- [] Optionally crypt content to be sent.
+- [x] Optionally crypt content to be sent.
 - [x] logging to syslog.
 - [x] uninteractive mode.
 - [x] Add dry run mode.
 - [x] Safeguard before writing file / upload to web archive.
 - [x] check existance of cli tool we use.
+- [] Upload phase, progress bar
+- [] Upload phase, can we pipe to prevent storing local file?
 
 ## Dev notes
 
