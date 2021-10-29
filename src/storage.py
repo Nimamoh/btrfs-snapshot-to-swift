@@ -107,6 +107,7 @@ def upload(filepath: str, container_name: str):
         source=filepath, object_name=os.path.basename(filepath)
     )
 
+    _log.debug("Uploading {upload_obj}")
     with SwiftService() as swift:
         for result in swift.upload(container=container_name, objects=[upload_obj]):
             _log.debug(f"Result of upload: {result}")

@@ -236,9 +236,10 @@ def process(ctx: Ctx):
         if not consent:
             _log.info("You refused, bybye")
             return
-
-        upload(filepath=filepath, container_name=ctx.container_name)
-        _log.info(f"Uploaded {filepath}")
+        
+        with _print_line([f"Uploading {to_upload} ({naturalsize(filesize)}). This might take awhile..."], ctx) as printer:
+            upload(filepath=filepath, container_name=ctx.container_name)
+            printer.reprint([f"Uploaded {to_upload} ✅"])
 
 
 def main(args):
