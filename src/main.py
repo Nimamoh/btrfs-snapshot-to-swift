@@ -14,6 +14,7 @@ import btrfs
 import argparse
 
 
+from exceptions import FileIsTooLarge
 from humanize import naturalsize
 from humanize import precisedelta
 from humanfriendly import parse_size
@@ -228,8 +229,7 @@ def process(ctx: Ctx):
     if filesize > ctx.upload_size_limit:
         limit = naturalsize(ctx.upload_size_limit)
         size = naturalsize(filesize)
-        _log.warning(f"File is over the limit of {limit} (file is {size}). Exiting.")
-        return
+        raise FileIsTooLarge(f"File is over the limit of {limit} (file is {size}).")
 
     if not ctx.dry_run:
         consent = _ask_uploading(to_upload, filepath, ctx=ctx)
@@ -326,6 +326,9 @@ if __name__ == "__main__":
     status = 0
     try:
         main(args)
+    except FileIsTooLarge as e:
+        _log.error(e)
+        status = -1
     except UnexpectedSnapshotStorageLayout as e:
         _log.error(
             f"Layout of files is not a subset of local snapshots. Please read the documentation."

@@ -10,6 +10,7 @@ Tools for automating pushing btrfs snapshot to [cloud archive cold storage servi
 - [x] Add dry run mode.
 - [x] Safeguard before writing file / upload to web archive.
 - [x] check existance of cli tool we use.
+- [x] Check overflowing filesize limit make script fail
 - [] Upload phase, progress bar
 - [] Upload phase, can we pipe to prevent storing local file?
 
