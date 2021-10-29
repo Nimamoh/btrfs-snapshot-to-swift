@@ -231,15 +231,20 @@ def process(ctx: Ctx):
         size = naturalsize(filesize)
         raise FileIsTooLarge(f"File is over the limit of {limit} (file is {size}).")
 
-    if not ctx.dry_run:
-        consent = _ask_uploading(to_upload, filepath, ctx=ctx)
-        if not consent:
-            _log.info("You refused, bybye")
-            return
-        
-        with _print_line([f"Uploading {to_upload} ({naturalsize(filesize)}). This might take awhile..."], ctx) as printer:
-            upload(filepath=filepath, container_name=ctx.container_name)
-            printer.reprint([f"Uploaded {to_upload} ✅"])
+    if ctx.dry_run:
+        return
+
+    consent = _ask_uploading(to_upload, filepath, ctx=ctx)
+    if not consent:
+        _log.info("You refused, bybye")
+        return
+    
+    humanized_filesize = naturalsize(filesize)
+    msg_prefix = f" ⏳ Uploading {to_upload}."
+    with _print_line([ f"{msg_prefix} This might take awhile." ], ctx) as printer:
+        for transferred in upload(filepath=filepath, container_name=ctx.container_name):
+            printer.reprint([ f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}" ])
+        printer.reprint([f"Uploaded {to_upload} 💪"])
 
 
 def main(args):

@@ -9,8 +9,15 @@ from swiftclient.service import SwiftService, SwiftUploadObject
 
 from btrfs import Snapshot, SnapshotsDifference
 from exceptions import ProgrammingError
+from pprint import pformat
 
 _log = logging.getLogger(__name__)
+
+
+class UploadFailure(RuntimeError):
+    """Raised when upload fails"""
+
+    pass
 
 
 def _compute_common_prefix(str_list: list[str]):
@@ -101,13 +108,44 @@ def only_stored(ro_snapshots: list[Snapshot], container_name: str) -> list[Snaps
 
 
 def upload(filepath: str, container_name: str):
-    """Uploads file to container"""
+    """
+    Uploads file to container
+    Returns:
+      Generator on progress. yield number of bytes transfered after each segment is transfered.
+    Raises:
+      UploadFailure
+    """
+    filep = os.path.abspath(filepath)
+    if not os.path.isfile(filep):
+        raise ValueError(f"{filep} is not a file")
 
-    upload_obj = SwiftUploadObject(
-        source=filepath, object_name=os.path.basename(filepath)
-    )
+    # _segment_size = int(1 * 1024 * 1024 * 1024)  # 1GiB
+    _segment_size = int(100 * 1024 * 1024)  # 100MiB
+    _opts = {
+        "retries": 0,
+        "segment_size": _segment_size,
+        "use_slo": True,
+    }
 
-    _log.debug("Uploading {upload_obj}")
-    with SwiftService() as swift:
-        for result in swift.upload(container=container_name, objects=[upload_obj]):
-            _log.debug(f"Result of upload: {result}")
+    _log.debug(f"Swift options: {_opts}")
+    with SwiftService(options=_opts) as swift:
+        # Contrary to what is stated in the documentation, upload creates container when it does not exist.
+        # In order to fail fast, we stat the container, which raises SwiftError in case of non existing one
+        swift.stat(container=container_name)
+
+        upload = SwiftUploadObject(source=filep, object_name=os.path.basename(filep))
+        _log.debug(f"Uploading {upload}")
+
+        will_fail = True
+        transfered = 0
+        yield transfered
+        for r in swift.upload(container=container_name, objects=[upload]):
+            _log.debug(pformat(r))
+            if r["success"] and r["action"] == "upload_object":
+                will_fail = False
+            if r["success"] and r["action"] == "upload_segment":
+                transfered += r["segment_size"]
+                yield transfered
+
+        if will_fail:
+            raise UploadFailure(f"Failed to upload {filep}")
