@@ -260,6 +260,9 @@ def main(args):
 
         if ctx.dry_run:
             _log.info("💧 Dry run, nothing will be uploaded 💧")
+        
+        if not ctx.age_recipient:
+            _log.warning(" ⚠ Age recipient is not set. Snapshot will not be encrypted before sending. ⚠ ")
 
         if not ctx.is_interactive:
             _log.debug("Non-interactive mode")
