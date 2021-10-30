@@ -1,23 +1,16 @@
-# ❄ BTRFS snapshots to cloud archive ❄
+# ❄ BTRFS snapshots to OpenShift container ❄
 
-Tools for automating pushing btrfs snapshot to [cloud archive cold storage service](https://www.ovhcloud.com/fr/public-cloud/cloud-archive/)
+Tools for automating pushing btrfs snapshots to a [swift complant object store](https://docs.openstack.org/swift/latest/).
 
-## Next TODO
+## Optional improvements
 
-- [x] Optionally crypt content to be sent.
-- [x] logging to syslog.
-- [x] uninteractive mode.
-- [x] Add dry run mode.
-- [x] Safeguard before writing file / upload to web archive.
-- [x] check existance of cli tool we use.
-- [x] Check overflowing filesize limit make script fail
-- [x] Upload phase, progress bar
+- [] Multiple snapshot upload in one script execution. 
 
 ## Dev notes
 
 ### OpenShift credentials
 
-Retrieve credentials from your openstack interface, then create an .env file containing credentials as varenv. See [OVH connection guide](https://docs.ovh.com/fr/storage/pca/cyberduck/) as an inspiration
+Retrieve credentials from your openstack interface, then create an .env file containing credentials as varenv:
 
 Example of env file:
 ```.env
@@ -46,6 +39,7 @@ Example:
 ### Create a local btrfs filesystem for testing
 
 Embedding a btrfs filesystem in a file for testing, for example:
+
 ```fish
 dd if=/dev/zero of=loopbackfile.img bs=512K count=1K # loopbackfile of 512M 
 sudo losetup -fP loopbackfile.img
