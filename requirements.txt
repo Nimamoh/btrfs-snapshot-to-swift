@@ -1,3 +1,2 @@
 -e .
 -e .[dev]
--e '/home/rog/DEV_TRASH/ansi_module'
