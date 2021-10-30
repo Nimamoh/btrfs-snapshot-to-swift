@@ -155,15 +155,6 @@ def _ask_uploading(to_upload: ContentToUpload, filepath: str, ctx: Ctx) -> bool:
     )
 
 
-def _ask_press_enter(ctx: Ctx):
-
-    if not ctx.is_interactive:
-        return
-
-    print("Press enter to exit.", file=sys.stderr, end="", flush=True)
-    next(sys.stdin)
-
-
 def _configure_logging(context: Ctx):
     verbose = context.verbose
     use_syslog = context.use_syslog
@@ -238,12 +229,14 @@ def process(ctx: Ctx):
     if not consent:
         _log.info("You refused, bybye")
         return
-    
+
     humanized_filesize = naturalsize(filesize)
     msg_prefix = f" ⏳ Uploading {to_upload}."
-    with _print_line([ f"{msg_prefix} This might take awhile." ], ctx) as printer:
+    with _print_line([f"{msg_prefix} This might take awhile."], ctx) as printer:
         for transferred in upload(filepath=filepath, container_name=ctx.container_name):
-            printer.reprint([ f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}" ])
+            printer.reprint(
+                [f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}"]
+            )
         printer.reprint([f"Uploaded {to_upload} 💪"])
 
 
@@ -266,9 +259,11 @@ def main(args):
 
         if ctx.dry_run:
             _log.info("💧 Dry run, nothing will be uploaded 💧")
-        
+
         if not ctx.age_recipient:
-            _log.warning(" ⚠ Age recipient is not set. Snapshot will not be encrypted before sending. ⚠ ")
+            _log.warning(
+                " ⚠ Age recipient is not set. Snapshot will not be encrypted before sending. ⚠ "
+            )
 
         if not ctx.is_interactive:
             _log.debug("Non-interactive mode")
@@ -277,7 +272,6 @@ def main(args):
         _log.debug(f"path: {ctx.path}")
         _log.debug(f"Using working directory {ctx.temp_dir_name}")
         process(ctx)
-        _ask_press_enter(ctx)
 
 
 if __name__ == "__main__":
