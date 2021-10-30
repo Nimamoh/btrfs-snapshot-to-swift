@@ -31,4 +31,7 @@ setup(
     extras_require={
         'dev': ['black', 'mypy', 'ptpython', 'pytest', 'pytest-watch'],
     },
+    entry_points={
+        'console_scripts': ['btrfs-snapshots-to-swift=main:main']
+    }
 )

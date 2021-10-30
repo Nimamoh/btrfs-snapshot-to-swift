@@ -195,52 +195,7 @@ def _configure_logging(context: Ctx):
         )
 
 
-def process(ctx: Ctx):
-
-    snapshots = [x for x in btrfs.find_ro_snapshots_of(ctx.path)]
-
-    if not snapshots:
-        _log.info(f"No readonly snapshots exists for {ctx.path}")
-        return
-
-    archived_snapshots = _look_for_archived_snapshots(snapshots, ctx)
-    to_upload = compute_snapshot_to_upload(snapshots, archived_snapshots)
-    if to_upload is None:
-        _log.info("Everything is already up to date.")
-        return
-
-    consent = _ask_preparing(to_upload, ctx=ctx)
-    if not consent:
-        _log.info("You refused, bybye")
-        return
-
-    filepath = _prepare_snapshot_to_upload(to_upload, ctx)
-    filesize = os.path.getsize(filepath)
-
-    if filesize > ctx.upload_size_limit:
-        limit = naturalsize(ctx.upload_size_limit)
-        size = naturalsize(filesize)
-        raise FileIsTooLarge(f"File is over the limit of {limit} (file is {size}).")
-
-    if ctx.dry_run:
-        return
-
-    consent = _ask_uploading(to_upload, filepath, ctx=ctx)
-    if not consent:
-        _log.info("You refused, bybye")
-        return
-
-    humanized_filesize = naturalsize(filesize)
-    msg_prefix = f" ⏳ Uploading {to_upload}."
-    with _print_line([f"{msg_prefix} This might take awhile."], ctx) as printer:
-        for transferred in upload(filepath=filepath, container_name=ctx.container_name):
-            printer.reprint(
-                [f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}"]
-            )
-        printer.reprint([f"Uploaded {to_upload} 💪"])
-
-
-def main(args):
+def process(args):
 
     with tempfile.TemporaryDirectory(dir=args.work_dir) as tmpdirname:
 
@@ -271,10 +226,51 @@ def main(args):
         _log.debug(f"Using storage container name {ctx.container_name}")
         _log.debug(f"path: {ctx.path}")
         _log.debug(f"Using working directory {ctx.temp_dir_name}")
-        process(ctx)
+
+        snapshots = [x for x in btrfs.find_ro_snapshots_of(ctx.path)]
+
+        if not snapshots:
+            _log.info(f"No readonly snapshots exists for {ctx.path}")
+            return
+
+        archived_snapshots = _look_for_archived_snapshots(snapshots, ctx)
+        to_upload = compute_snapshot_to_upload(snapshots, archived_snapshots)
+        if to_upload is None:
+            _log.info("Everything is already up to date.")
+            return
+
+        consent = _ask_preparing(to_upload, ctx=ctx)
+        if not consent:
+            _log.info("You refused, bybye")
+            return
+
+        filepath = _prepare_snapshot_to_upload(to_upload, ctx)
+        filesize = os.path.getsize(filepath)
+
+        if filesize > ctx.upload_size_limit:
+            limit = naturalsize(ctx.upload_size_limit)
+            size = naturalsize(filesize)
+            raise FileIsTooLarge(f"File is over the limit of {limit} (file is {size}).")
+
+        if ctx.dry_run:
+            return
+
+        consent = _ask_uploading(to_upload, filepath, ctx=ctx)
+        if not consent:
+            _log.info("You refused, bybye")
+            return
+
+        humanized_filesize = naturalsize(filesize)
+        msg_prefix = f" ⏳ Uploading {to_upload}."
+        with _print_line([f"{msg_prefix} This might take awhile."], ctx) as printer:
+            for transferred in upload(filepath=filepath, container_name=ctx.container_name):
+                printer.reprint(
+                    [f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}"]
+                )
+            printer.reprint([f"Uploaded {to_upload} 💪"])
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="List snapshots of subvolume")
     parser.add_argument("path", type=str, help="Path of subvolume")
     parser.add_argument(
@@ -328,7 +324,7 @@ if __name__ == "__main__":
 
     status = 0
     try:
-        main(args)
+        process(args)
     except FileIsTooLarge as e:
         _log.error(e)
         status = -1
@@ -342,3 +338,7 @@ if __name__ == "__main__":
         status = -1
 
     sys.exit(status)
+
+
+if __name__ == "__main__":
+    main()
