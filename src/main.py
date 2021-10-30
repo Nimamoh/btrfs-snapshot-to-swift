@@ -272,19 +272,19 @@ def process(args):
 
 def main():
     parser = argparse.ArgumentParser(description="List snapshots of subvolume")
-    parser.add_argument("path", type=str, help="Path of subvolume")
+    parser.add_argument("path", type=str, help="Path of subvolume.")
     parser.add_argument(
         "--container-name",
         dest="container_name",
         type=str,
-        help="Container name of the web storage",
+        help="Container name of your swift service.",
         required=True,
     )
     parser.add_argument(
         "--work-dir",
         dest="work_dir",
         type=str,
-        help="Directory in which the script will store snapshots before sending",
+        help="Directory in which the script will store snapshots before sending.",
         required=False,
     )
     parser.add_argument(
@@ -309,7 +309,7 @@ def main():
         "--syslog",
         dest="syslog",
         type=bool,
-        help=f"Log to local syslogd socket '{_SYSLOG_SOCKET}'",
+        help=f"Log to local syslogd socket '{_SYSLOG_SOCKET}'.",
         const=True,
         default=False,
         nargs="?",

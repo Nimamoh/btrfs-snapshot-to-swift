@@ -1,14 +1,73 @@
 # ❄ BTRFS snapshots to OpenShift container ❄
 
-Tools for automating pushing btrfs snapshots to a [swift complant object store](https://docs.openstack.org/swift/latest/).
+Tool for automating pushing btrfs snapshots to a [swift complant object store](https://docs.openstack.org/swift/latest/).
+
+#TODO: explain what the script is doing
+
+### Naming convention of snapshtos
+
+Each snapshot is identified by a name which is computed from its relative path such as, for a relative path `<relative_path>`:
+
+- We prefix the UUID of the root filesystem of the snapshot `<UUIDFS>/`
+- We escape each `/` folder separator character with a literal `\x2f`
+
+- For a snapshot with relative path `snapshots/subolume-1`. Its name would be `<UUIDFS>\x2fsnapshtos\x2fsubvolume-1`
+
+**We do not accept snapshot which relative path contains literal `\x2f`**
 
 ## How to install
 
-It is not available in PyPI. You can install the script through [pipx](https://github.com/pypa/pipx).
+Tool is not available through PyPI. You can install the script with [pipx](https://github.com/pypa/pipx).
 
 ```fish
 pipx install --system-site-packages --editable (pwd)
 ```
+
+>
+> It is important to use `--system-site-packages` since script relies on [libbtrfsutil](https://github.com/kdave/btrfs-progs/tree/master/libbtrfsutil) python bindings to work.
+>
+
+## How to use
+
+Script is available through `btrfs-snapshot-to-swift` command.
+
+```
+usage: btrfs-snapshots-to-swift [-h] --container-name CONTAINER_NAME [--work-dir WORK_DIR] [--upload-size-limit UPLOAD_SIZE_LIMIT] [--dry-run] [--age-recipient AGE_RECIPIENT]
+                                [--syslog [SYSLOG]] [-v]
+                                path
+
+List snapshots of subvolume
+
+positional arguments:
+  path                  Path of subvolume.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --container-name CONTAINER_NAME
+                        Container name of your swift service.
+  --work-dir WORK_DIR   Directory in which the script will store snapshots before sending.
+  --upload-size-limit UPLOAD_SIZE_LIMIT
+                        Prevent uploading file over this size.
+  --dry-run             Dry run mode. Do everything except upload.
+  --age-recipient AGE_RECIPIENT
+                        Enable encryption through age, using provided recipient. see https://github.com/FiloSottile/age.
+  --syslog [SYSLOG]     Log to local syslogd socket '/dev/log'.
+  -v                    Enable debug messages
+```
+
+
+## Troubleshooting
+
+### ModuleNotFoundError: No module named 'btrfsutil'
+
+Ensure that your python environment from which you launch the script have libbtrfsutil python bindings available.   
+For Ubuntu, these bindings are available with `python3-btrfsutil` package.   
+
+### swiftclient.exceptions.ClientException: No tenant specified
+
+You need to have swift credentials available as environment variable during the script execution.
+
+See [API documentation](https://docs.openstack.org/python-swiftclient/xena/service-api.html#authentication) for more information.
 
 ## Dev notes
 
@@ -54,3 +113,4 @@ sudo mount -t btrfs -o noatime /dev/loop0 ./fs
 ## Optional improvements
 
 - [] Multiple snapshot upload in one script execution. 
+- [] Other ways to authenticate with swift than env var
