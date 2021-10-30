@@ -121,7 +121,7 @@ def test_prepare_content():
     """Test initialization of PrepareContent."""
     with TemporaryDirectory() as tmpdirname:
         snapshot = next(_snapshot_gen())
-        preparator = PrepareContent(snapshot, tmpdirname)
+        preparator = PrepareContent(snapshot, tmpdirname, None)
         assert preparator.target_path() is not None
 
 

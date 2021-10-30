@@ -30,7 +30,7 @@ from business import (
     ContentToUpload,
 )
 
-from ansi.advanced import print_lines as ansi_print_lines
+from ansi.print_lines import print_lines as ansi_print_lines
 from ansi import colors
 
 

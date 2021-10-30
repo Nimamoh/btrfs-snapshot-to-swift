@@ -27,7 +27,6 @@ setup(
         'coloredlogs',
         'humanize',
         'humanfriendly',
-        'ansi',
     ],
     extras_require={
         'dev': ['black', 'mypy', 'ptpython', 'pytest', 'pytest-watch'],
