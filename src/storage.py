@@ -119,8 +119,7 @@ def upload(filepath: str, container_name: str):
     if not os.path.isfile(filep):
         raise ValueError(f"{filep} is not a file")
 
-    # _segment_size = int(1 * 1024 * 1024 * 1024)  # 1GiB
-    _segment_size = int(100 * 1024 * 1024)  # 100MiB
+    _segment_size = int(1 * 1024 * 1024 * 1024)  # 1GiB
     _opts = {
         "retries": 0,
         "segment_size": _segment_size,
