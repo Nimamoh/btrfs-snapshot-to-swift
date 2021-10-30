@@ -33,5 +33,5 @@ setup(
     },
     entry_points={
         'console_scripts': ['btrfs-snapshots-to-swift=main:main']
-    }
+    },
 )

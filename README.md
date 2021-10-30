@@ -2,9 +2,13 @@
 
 Tools for automating pushing btrfs snapshots to a [swift complant object store](https://docs.openstack.org/swift/latest/).
 
-## Optional improvements
+## How to install
 
-- [] Multiple snapshot upload in one script execution. 
+It is not available in PyPI. You can install the script through [pipx](https://github.com/pypa/pipx).
+
+```fish
+pipx install --system-site-packages --editable (pwd)
+```
 
 ## Dev notes
 
@@ -46,3 +50,7 @@ sudo losetup -fP loopbackfile.img
 sudo mkfs.btrfs /dev/loop0 # assuming your loopbackfile is assigned loop0
 sudo mount -t btrfs -o noatime /dev/loop0 ./fs
 ```
+
+## Optional improvements
+
+- [] Multiple snapshot upload in one script execution. 
