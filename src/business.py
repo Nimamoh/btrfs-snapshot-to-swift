@@ -13,9 +13,6 @@ import subprocess
 import shutil
 import contextlib
 
-_log = logging.getLogger(__name__)
-
-
 class UnexpectedSnapshotStorageLayout(Exception):
     """Raised when local snapshots and distant stored snapshots differs too much to be reliable"""
 
@@ -26,63 +23,69 @@ def unequal_snapshots_ex(s1, s2) -> UnexpectedSnapshotStorageLayout:
     raise UnexpectedSnapshotStorageLayout(f"{s1} should equals {s2}")
 
 
-ContentToUpload = Union[Snapshot, SnapshotsDifference]
+ContentToArchive = Union[Snapshot, SnapshotsDifference]
 
-
-def compute_snapshot_to_upload(
-    snapshots: Sequence[Snapshot], archived_snapshots: Sequence[Snapshot]
-) -> Optional[ContentToUpload]:
+def compute_snapshot_to_archive(snapshots: Sequence[Snapshot], archived: Sequence[Snapshot]) -> Iterator[ContentToArchive]:
     """
-    Compute snapshots to save and upload,
+    Compute snapshots to archive,
 
     Returns:
-      ContentToUpload
+      generator of content to archive
     Raises:
       UnexpectedSnapshotStorageLayout: If stored snapshot is not
          consistent with local ones.
       ValueError: If snapshots contains duplicates, none...
     """
-
     def sane_check(snapshots):
         if len(snapshots) != len(set(snapshots)):
             raise ValueError("We shouldn't have duplicate snapshots")
         if None in snapshots:
             raise ValueError("snapshots should not contains None values")
 
+    def snapshot_or_diff(parent, snapshot):
+        if parent is None:
+            return snapshot
+        else:
+            return SnapshotsDifference(parent, snapshot)
+
+    def chain_of(snapshots: Sequence[Snapshot]):
+        chain = []
+        parent = None
+        for s in snapshots:
+            chain.append(snapshot_or_diff(parent, s))
+            parent = s
+        return chain
+    
+
     sane_check(snapshots)
-    sane_check(archived_snapshots)
+    sane_check(archived)
 
-    if len(snapshots) == 0:
-        return None
-    if len(archived_snapshots) == 0:
-        return snapshots[0]
-
+    if not snapshots:
+        return #type: ignore
+    if not archived:
+        yield from chain_of(snapshots)
+        return
+    if len(snapshots) == len(archived):
+        return
+    
     corresponding_archives = tuple(
-        archived_snapshots[i] if i < len(archived_snapshots) else None
+        archived[i] if i < len(archived) else None
         for i in range(len(snapshots))
     )
     assert len(snapshots) == len(corresponding_archives)
 
-    previous = None
-    parent = archived_snapshots[0]
-    current = None
-    z = zip(snapshots, corresponding_archives)
-    for s, a in z:
-        if previous == s:
-            raise ValueError(f"Should not have duplicate in snapshots")
-        previous = s
+    chain: Sequence[Snapshot] = []
+    for i, (s, a) in enumerate(zip(snapshots, corresponding_archives)):
         if a is not None and s != a:
             raise unequal_snapshots_ex(s, a)
-        if a is not None:
-            parent = a
-        if a is None:
-            current = s
-            break
 
-    if current is None:
-        return None
-    else:
-        return SnapshotsDifference(parent=parent, snapshot=current)
+        if a is not None:
+            chain = [a]
+            continue
+        chain += snapshots[i:] #type: ignore
+        break
+
+    yield from (chain_of(chain)[1:])
 
 
 class PrepareContentEx(Exception):
@@ -95,7 +98,7 @@ class PrepareContent:
     """
     Prepare the content to upload to a local file
     Args:
-      to_upload (ContentToUpload): describe the content to ultimately upload,
+      to_upload (ContentToArchive): describe the content to ultimately upload,
         that we will be turning in a file beforehand
       basedir (basedir): directory in which we will store the file.
         Consider that change to existing files in that directory may happen.
@@ -105,7 +108,7 @@ class PrepareContent:
       PrepareContentEx
     """
 
-    def __init__(self, content: ContentToUpload, dirname: str, age_recipient: str):
+    def __init__(self, content: ContentToArchive, dirname: str, age_recipient: str):
 
         self.__content = content
         self.__dirname = os.path.abspath(dirname)

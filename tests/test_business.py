@@ -5,7 +5,7 @@ from itertools import repeat
 from uuid import uuid4
 from tempfile import TemporaryDirectory
 
-from business import PrepareContent, SnapshotsDifference, compute_snapshot_to_upload
+from business import PrepareContent, SnapshotsDifference, compute_snapshot_to_archive
 from business import UnexpectedSnapshotStorageLayout
 
 
@@ -61,9 +61,9 @@ def _snapshot_diff_gen():
         ),
     ],
 )
-def test_compute_snapshots_to_upload_unexpected_storage_layout(snapshots, archived):
+def test_compute_snapshots_to_archive_unexpected_storage_layout(snapshots, archived):
     with pytest.raises(UnexpectedSnapshotStorageLayout):
-        compute_snapshot_to_upload(snapshots, archived)
+        next(compute_snapshot_to_archive(snapshots, archived))
 
 
 @pytest.mark.parametrize(
@@ -76,9 +76,9 @@ def test_compute_snapshots_to_upload_unexpected_storage_layout(snapshots, archiv
         ),
     ],
 )
-def test_compute_snapshots_to_upload_value_error(snapshots, archived):
+def test_compute_snapshots_to_archive_value_error(snapshots, archived):
     with pytest.raises(ValueError):
-        compute_snapshot_to_upload(snapshots, archived)
+        next(compute_snapshot_to_archive(snapshots, archived))
 
 
 @pytest.mark.parametrize(
@@ -94,26 +94,31 @@ def test_compute_snapshots_to_upload_value_error(snapshots, archived):
         ),
     ],
 )
-def test_compute_snapshots_to_upload_no_exception(snapshots, archived):
-    compute_snapshot_to_upload(snapshots, archived)
+def test_compute_snapshots_to_archive_no_exception(snapshots, archived):
+    compute_snapshot_to_archive(snapshots, archived)
 
 
-def test_compute_snapshots_to_upload():
-    assert compute_snapshot_to_upload([], []) == None
+def test_compute_snapshots_to_archive():
+    with pytest.raises(StopIteration):
+        next(compute_snapshot_to_archive([], []))
 
-    snapshots = tuple(s for s in _snapshot_gen())
+    n_snapshots = 3
+    snapshots = tuple(s for (i, s) in enumerate(_snapshot_gen()) if i < n_snapshots)
 
     archived = ()
-    to_be_uploaded = compute_snapshot_to_upload(snapshots, archived)
-    assert to_be_uploaded == snapshots[0]
+    to_be_uploaded = [x for x in compute_snapshot_to_archive(snapshots, archived)]
+    assert len(to_be_uploaded) == n_snapshots
+    assert isinstance(to_be_uploaded[0], Snapshot)
+    assert isinstance(to_be_uploaded[1], SnapshotsDifference)
 
     archived = tuple(s for (i, s) in enumerate(snapshots) if i < 2)
-    to_be_uploaded = compute_snapshot_to_upload(snapshots, archived)
-    assert to_be_uploaded == SnapshotsDifference(snapshots[1], snapshots[2])
+    to_be_uploaded = [x for x in compute_snapshot_to_archive(snapshots, archived)]
+    assert len(to_be_uploaded) == 1
+    assert isinstance(to_be_uploaded[0], SnapshotsDifference)
 
     archived = snapshots
-    to_be_uploaded = compute_snapshot_to_upload(snapshots, archived)
-    assert to_be_uploaded == None
+    to_be_uploaded = [x for x in compute_snapshot_to_archive(snapshots, archived)]
+    assert not to_be_uploaded
 
 
 def test_prepare_content():

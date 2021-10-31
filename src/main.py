@@ -26,8 +26,8 @@ from storage import only_stored, upload
 from business import (
     UnexpectedSnapshotStorageLayout,
     PrepareContent,
-    compute_snapshot_to_upload,
-    ContentToUpload,
+    compute_snapshot_to_archive,
+    ContentToArchive,
 )
 
 from ansi.print_lines import print_lines as ansi_print_lines
@@ -142,11 +142,11 @@ def _ask_yes_no_question(question: str, ctx: Ctx, default: bool = False):
     return answer == "yes"
 
 
-def _ask_preparing(to_upload: ContentToUpload, ctx: Ctx):
+def _ask_preparing(to_upload: ContentToArchive, ctx: Ctx):
     return _ask_yes_no_question(f"Prepare {str(to_upload)}?", ctx=ctx, default=True)
 
 
-def _ask_uploading(to_upload: ContentToUpload, filepath: str, ctx: Ctx) -> bool:
+def _ask_uploading(to_upload: ContentToArchive, filepath: str, ctx: Ctx) -> bool:
     size = naturalsize(os.path.getsize(filepath))
     return _ask_yes_no_question(
         f"Upload backup of {str(to_upload)} ({size}) to container '{ctx.container_name}'?",
@@ -234,40 +234,50 @@ def process(args):
             return
 
         archived_snapshots = _look_for_archived_snapshots(snapshots, ctx)
-        to_upload = compute_snapshot_to_upload(snapshots, archived_snapshots)
-        if to_upload is None:
+        content_to_archive_list = [
+            x for x in compute_snapshot_to_archive(snapshots, archived_snapshots)
+        ]
+
+        if not content_to_archive_list:
             _log.info("Everything is already up to date.")
-            return
 
-        consent = _ask_preparing(to_upload, ctx=ctx)
-        if not consent:
-            _log.info("You refused, bybye")
-            return
+        for content_to_archive in content_to_archive_list:
 
-        filepath = _prepare_snapshot_to_upload(to_upload, ctx)
-        filesize = os.path.getsize(filepath)
+            consent = _ask_preparing(content_to_archive, ctx=ctx)
+            if not consent:
+                _log.info("You refused, bybye")
+                return
 
-        if filesize > ctx.upload_size_limit:
-            limit = naturalsize(ctx.upload_size_limit)
-            size = naturalsize(filesize)
-            raise FileIsTooLarge(f"File is over the limit of {limit} (file is {size}).")
+            filepath = _prepare_snapshot_to_upload(content_to_archive, ctx)
+            filesize = os.path.getsize(filepath)
 
-        if ctx.dry_run:
-            return
-
-        consent = _ask_uploading(to_upload, filepath, ctx=ctx)
-        if not consent:
-            _log.info("You refused, bybye")
-            return
-
-        humanized_filesize = naturalsize(filesize)
-        msg_prefix = f" ⏳ Uploading {to_upload}."
-        with _print_line([f"{msg_prefix} This might take awhile."], ctx) as printer:
-            for transferred in upload(filepath=filepath, container_name=ctx.container_name):
-                printer.reprint(
-                    [f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}"]
+            if filesize > ctx.upload_size_limit:
+                limit = naturalsize(ctx.upload_size_limit)
+                size = naturalsize(filesize)
+                raise FileIsTooLarge(
+                    f"File is over the limit of {limit} (file is {size})."
                 )
-            printer.reprint([f"Uploaded {to_upload} 💪"])
+
+            if ctx.dry_run:
+                return
+
+            consent = _ask_uploading(content_to_archive, filepath, ctx=ctx)
+            if not consent:
+                _log.info("You refused, bybye")
+                return
+
+            humanized_filesize = naturalsize(filesize)
+            msg_prefix = f" ⏳ Uploading {content_to_archive}."
+            with _print_line([f"{msg_prefix} This might take awhile."], ctx) as printer:
+                for transferred in upload(
+                    filepath=filepath, container_name=ctx.container_name
+                ):
+                    printer.reprint(
+                        [
+                            f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}"
+                        ]
+                    )
+                printer.reprint([f"Uploaded {content_to_archive} 💪"])
 
 
 def main():

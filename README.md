@@ -2,6 +2,12 @@
 
 Tool for automating pushing btrfs snapshots to a [swift complant object store](https://docs.openstack.org/swift/latest/).
 
+# TODO
+
+- [] Disk quotas for list of preparation
+- [] signature of uploaded files?
+- [] Document what the script is doing
+
 #TODO: explain what the script is doing
 
 ### Naming convention of snapshtos
@@ -112,5 +118,4 @@ sudo mount -t btrfs -o noatime /dev/loop0 ./fs
 
 ## Optional improvements
 
-- [] Multiple snapshot upload in one script execution. 
 - [] Other ways to authenticate with swift than env var
