@@ -1,16 +1,35 @@
 # ❄ BTRFS snapshots to OpenShift container ❄
 
-Tool for automating pushing btrfs snapshots to a [swift complant object store](https://docs.openstack.org/swift/latest/).
+Tool for synchronizing btrfs snapshots to a [swift compliant object store](https://docs.openstack.org/swift/latest/).
+
+Given a subvolume, this script detects its local snapshots. Each local snapshot is then synchronized with swift container. The snapshots are backup'd in an incremental fashion.   
+
+Synchronization process consists of:
+
+ - Giving an unique name for each local snapshot. See [naming convention](#naming-convention-of-snapshots)
+ - Check which snapshot is already in swift container (solely based on name)
+ - For each snapshot *only present on local filesystem*, compute the difference with previous snapshot (based on creation date) and upload it to swift.
+
+> Content is first computed/stored locally before being sent to swift. Computation/storage process is also called "preparation phase".   
+> Preparation phase is performed with wrapping `btrfs-send` command (optionally report progress with `pv`). Upload is done with [swiftclient](https://docs.openstack.org/python-swiftclient/latest/service-api.html#upload)
+
+## Gotchas, how to use correctly
+
+ - It only works with local readonly snapshots. Also, since it identifies snapshots using a naming convention, don't update / replace snapshot content. Prefer "immutable" snapshot with name based on date.
+
+ - It performs incremental backups, this means that content stored in swift container form a "chain" which should not be broken. Don't manually delete archived content.
+
+ - Incremental changes is computed with local snapshots, if you delete local snapshots, make sure to keep the *last archived one* locally to conserve incremental behavior. Otherwise, the whole snapshot will be archived.
+
+ - Content is first computed and store locally in "working directory", it is then uploaded in swift. For large subvolumes (especially in initial archiving of the whole content), make sure you have enough space in working directory.
+
+ - Last but not least, as a good practice advice, you should regularly check that your backups can successfully be restored.
 
 # TODO
 
-- [] Disk quotas for list of preparation
-- [] signature of uploaded files?
-- [] Document what the script is doing
+- [] Remove disk quotas
 
-#TODO: explain what the script is doing
-
-### Naming convention of snapshtos
+### Naming convention of snapshots
 
 Each snapshot is identified by a name which is computed from its relative path such as, for a relative path `<relative_path>`:
 
@@ -60,7 +79,6 @@ optional arguments:
   --syslog [SYSLOG]     Log to local syslogd socket '/dev/log'.
   -v                    Enable debug messages
 ```
-
 
 ## Troubleshooting
 
