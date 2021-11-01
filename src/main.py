@@ -14,7 +14,6 @@ import btrfs
 import argparse
 
 
-from exceptions import FileIsTooLarge
 from humanize import naturalsize
 from humanize import precisedelta
 from humanfriendly import parse_size
@@ -50,7 +49,6 @@ class Ctx:
     use_syslog: bool
     is_interactive: bool
     dry_run: bool
-    upload_size_limit: int
 
     def supports_fancy_output(self) -> bool:
         """Does the script execution context allows for fancy ansi escape code"""
@@ -208,7 +206,6 @@ def process(args):
             use_syslog=args.syslog,
             is_interactive=(sys.stdin.isatty() and sys.stderr.isatty()),
             dry_run=args.dry_run,
-            upload_size_limit=args.upload_size_limit,
         )
         _configure_logging(ctx)
 
@@ -251,13 +248,6 @@ def process(args):
             filepath = _prepare_snapshot_to_upload(content_to_archive, ctx)
             filesize = os.path.getsize(filepath)
 
-            if filesize > ctx.upload_size_limit:
-                limit = naturalsize(ctx.upload_size_limit)
-                size = naturalsize(filesize)
-                raise FileIsTooLarge(
-                    f"File is over the limit of {limit} (file is {size})."
-                )
-
             if ctx.dry_run:
                 return
 
@@ -298,13 +288,6 @@ def main():
         required=False,
     )
     parser.add_argument(
-        "--upload-size-limit",
-        help="Prevent uploading file over this size.",
-        dest="upload_size_limit",
-        type=parse_size,
-        default="1EiB",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Dry run mode. Do everything except upload.",
@@ -335,10 +318,7 @@ def main():
     status = 0
     try:
         process(args)
-    except FileIsTooLarge as e:
-        _log.error(e)
-        status = -1
-    except UnexpectedSnapshotStorageLayout as e:
+    except UnexpectedSnapshotStorageLayout:
         _log.error(
             f"Layout of files is not a subset of local snapshots. Please read the documentation."
         )

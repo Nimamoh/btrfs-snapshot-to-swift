@@ -25,10 +25,6 @@ Synchronization process consists of:
 
  - Last but not least, as a good practice advice, you should regularly check that your backups can successfully be restored.
 
-# TODO
-
-- [] Remove disk quotas
-
 ### Naming convention of snapshots
 
 Each snapshot is identified by a name which is computed from its relative path such as, for a relative path `<relative_path>`:
@@ -57,7 +53,7 @@ pipx install --system-site-packages --editable (pwd)
 Script is available through `btrfs-snapshot-to-swift` command.
 
 ```
-usage: btrfs-snapshots-to-swift [-h] --container-name CONTAINER_NAME [--work-dir WORK_DIR] [--upload-size-limit UPLOAD_SIZE_LIMIT] [--dry-run] [--age-recipient AGE_RECIPIENT]
+usage: btrfs-snapshots-to-swift [-h] --container-name CONTAINER_NAME [--work-dir WORK_DIR] [--dry-run] [--age-recipient AGE_RECIPIENT]
                                 [--syslog [SYSLOG]] [-v]
                                 path
 
@@ -71,8 +67,6 @@ optional arguments:
   --container-name CONTAINER_NAME
                         Container name of your swift service.
   --work-dir WORK_DIR   Directory in which the script will store snapshots before sending.
-  --upload-size-limit UPLOAD_SIZE_LIMIT
-                        Prevent uploading file over this size.
   --dry-run             Dry run mode. Do everything except upload.
   --age-recipient AGE_RECIPIENT
                         Enable encryption through age, using provided recipient. see https://github.com/FiloSottile/age.
