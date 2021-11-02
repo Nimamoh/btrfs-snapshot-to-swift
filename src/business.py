@@ -8,6 +8,7 @@ from storage import compute_storage_filename, ContentToArchive
 from exceptions import ProgrammingError
 
 import os
+import sys
 import logging
 import subprocess
 import shutil
@@ -177,7 +178,7 @@ class PrepareContent:
 
         _log.debug("Send command:")
         _log.debug(cmd)
-        return subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=stdout)
+        return subprocess.Popen(cmd, stderr=sys.stderr, stdout=stdout)
     
     def _age_process(self, stdin, stdout):
         if not self.__age_recipient:
