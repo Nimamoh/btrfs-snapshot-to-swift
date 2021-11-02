@@ -2,10 +2,8 @@
 
 import logging
 import logging.handlers
-from typing import Sequence, TextIO
-import coloredlogs
+from typing import Sequence
 import os
-import stat
 import sys
 import tempfile
 import time
@@ -13,14 +11,10 @@ import time
 import btrfs
 import argparse
 
-
 from humanize import naturalsize
 from humanize import precisedelta
-from humanfriendly import parse_size
 import pyinputplus as pyin
 
-from contextlib import suppress
-from dataclasses import dataclass
 from storage import only_stored, upload
 from business import (
     UnexpectedSnapshotStorageLayout,
@@ -29,67 +23,32 @@ from business import (
     ContentToArchive,
 )
 
-from ansi.print_lines import print_lines as ansi_print_lines
-from ansi import colors
 
+from _main_commons import Ctx, print_lines, in_green, in_red, _configure_logging
+
+
+from _main_commons import _SYSLOG_SOCKET
 
 _log = logging.getLogger(__name__)
-_SYSLOG_SOCKET = "/dev/log"
 
 
-@dataclass
-class Ctx:
-    """Context of script execution"""
+def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx) -> Sequence[btrfs.Snapshot]:
+    """
+    Look for archived snapshots in storage
 
-    path: str
-    verbose: bool
-    container_name: str
-    temp_dir_name: str
-    age_recipient: str
-    use_syslog: bool
-    is_interactive: bool
-    dry_run: bool
-
-    def supports_fancy_output(self) -> bool:
-        """Does the script execution context allows for fancy ansi escape code"""
-        return self.is_interactive and not self.use_syslog
-
-
-def _print_line(lines: Sequence[str], ctx: Ctx):
-    """Wraps ansi.print_lines with setup specific to the script execution"""
-    append_only = not ctx.supports_fancy_output() or ctx.verbose
-    return ansi_print_lines(
-        lines=lines,
-        append_only=append_only,
-        file=sys.stderr,
-        printfn=lambda line, file: _log.info(line),
-    )
-
-
-def _in_green(s: str, ctx: Ctx):
-    if not ctx.supports_fancy_output():
-        return s
-    return colors.in_green(s)
-
-
-def _in_red(s: str, ctx: Ctx):
-    if not ctx.supports_fancy_output():
-        return s
-    return colors.in_red(s)
-
-
-def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
-    """Look for archived snapshots in storage"""
+    Returns:
+      sequence of archived snapshots
+    """
     lines = [s.rel_path for s in ro_snapshots]
     lines += [f"Requesting Web Archive... ⏳"]
-    archived_snapshots = []
+    archived_snapshots: Sequence = []
 
-    with _print_line(lines, ctx) as printer:
+    with print_lines(lines, ctx) as printer:
 
         archived_snapshots = only_stored(ro_snapshots, ctx.container_name)
 
-        in_cloud_str = _in_green("in ☁️", ctx)
-        not_in_cloud_str = _in_red("not in ☁️", ctx)
+        in_cloud_str = in_green("in ☁️", ctx)
+        not_in_cloud_str = in_red("not in ☁️", ctx)
         lines = [
             f"{s.rel_path}... {in_cloud_str if s in archived_snapshots else not_in_cloud_str}"
             for s in ro_snapshots
@@ -99,14 +58,19 @@ def _look_for_archived_snapshots(ro_snapshots, ctx: Ctx):
     return archived_snapshots
 
 
-def _prepare_snapshot_to_upload(to_upload, ctx: Ctx):
-    """Prepare snapshot to upload in a local file"""
+def _prepare_snapshot_to_archive(to_archive, ctx: Ctx) -> str:
+    """
+    Prepare snapshot to archive in a local file
+
+    Returns:
+      fullpath of the file to archive
+    """
     start = time.time()
 
-    preparator = PrepareContent(to_upload, ctx.temp_dir_name, ctx.age_recipient)
+    preparator = PrepareContent(to_archive, ctx.temp_dir_name, ctx.age_recipient)
     filepath = preparator.target_path()
 
-    with _print_line(["Initializing preparation ⏳"], ctx) as printer:
+    with print_lines(["Initializing preparation ⏳"], ctx) as printer:
         for progress_line in preparator.prepare():
             printer.reprint([progress_line])
 
@@ -118,7 +82,7 @@ def _prepare_snapshot_to_upload(to_upload, ctx: Ctx):
     return filepath
 
 
-def _ask_yes_no_question(question: str, ctx: Ctx, default: bool = False):
+def _ask_yes_no_question(question: str, ctx: Ctx, default: bool = False) -> bool:
     """
     Prompt a yes/no question to stderr and read/parse user response.
     If script is non-interactive, then it prompt the question
@@ -140,57 +104,17 @@ def _ask_yes_no_question(question: str, ctx: Ctx, default: bool = False):
     return answer == "yes"
 
 
-def _ask_preparing(to_upload: ContentToArchive, ctx: Ctx):
-    return _ask_yes_no_question(f"Prepare {str(to_upload)}?", ctx=ctx, default=True)
+def _ask_preparing(to_archive: ContentToArchive, ctx: Ctx):
+    return _ask_yes_no_question(f"Prepare {str(to_archive)}?", ctx=ctx, default=True)
 
 
-def _ask_uploading(to_upload: ContentToArchive, filepath: str, ctx: Ctx) -> bool:
+def _ask_archiving(to_archive: ContentToArchive, filepath: str, ctx: Ctx) -> bool:
     size = naturalsize(os.path.getsize(filepath))
     return _ask_yes_no_question(
-        f"Upload backup of {str(to_upload)} ({size}) to container '{ctx.container_name}'?",
+        f"Upload backup of {str(to_archive)} ({size}) to container '{ctx.container_name}'?",
         ctx=ctx,
         default=True,
     )
-
-
-def _configure_logging(context: Ctx):
-    verbose = context.verbose
-    use_syslog = context.use_syslog
-
-    def _formatter(stream: TextIO):
-        return (
-            coloredlogs.ColoredFormatter("%(message)s")
-            if stream.isatty()
-            else logging.Formatter("%(levelname)s - %(message)s")
-        )
-
-    level = logging.DEBUG if verbose else logging.INFO
-    syslog_socket_ok = False
-    with suppress(BaseException):  # On purpose.
-        syslog_socket_ok = stat.S_ISSOCK(os.stat(_SYSLOG_SOCKET).st_mode)
-
-    handler = None
-    if use_syslog and syslog_socket_ok:
-        handler = logging.handlers.SysLogHandler(address=_SYSLOG_SOCKET)
-    else:
-        stream_handler = logging.StreamHandler()
-        formatter = _formatter(stream_handler.stream)  # type: ignore
-        stream_handler.setFormatter(formatter)
-        handler = stream_handler  # type: ignore
-
-    handler.setLevel(level)  # type: ignore
-    logging.root.setLevel(level)
-    logging.root.addHandler(handler)  # type: ignore
-
-    # Disabling component which are too verbose
-    logging.getLogger("keystoneclient").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)  #
-    logging.getLogger("swiftclient").setLevel(logging.WARNING)  #
-
-    if use_syslog and not syslog_socket_ok:
-        _log.warning(
-            f"Impossible to use syslogd daemon (using '{_SYSLOG_SOCKET} socket'). Falling back to stdout logging."
-        )
 
 
 def process(args):
@@ -245,20 +169,20 @@ def process(args):
                 _log.info("You refused, bybye")
                 return
 
-            filepath = _prepare_snapshot_to_upload(content_to_archive, ctx)
+            filepath = _prepare_snapshot_to_archive(content_to_archive, ctx)
             filesize = os.path.getsize(filepath)
 
             if ctx.dry_run:
                 return
 
-            consent = _ask_uploading(content_to_archive, filepath, ctx=ctx)
+            consent = _ask_archiving(content_to_archive, filepath, ctx=ctx)
             if not consent:
                 _log.info("You refused, bybye")
                 return
 
             humanized_filesize = naturalsize(filesize)
             msg_prefix = f" ⏳ Uploading {content_to_archive}."
-            with _print_line([f"{msg_prefix} This might take awhile."], ctx) as printer:
+            with print_lines([f"{msg_prefix} This might take awhile."], ctx) as printer:
                 for transferred in upload(
                     filepath=filepath, container_name=ctx.container_name
                 ):

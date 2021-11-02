@@ -1,3 +1,6 @@
+"""
+Module holding operation directly related to btrfs.
+"""
 import logging
 import os
 from dataclasses import dataclass
@@ -24,7 +27,8 @@ class Snapshot:
     """Creation time of the snapshot"""
 
     def __str__(self) -> str:
-        return f'<FS_TREE>/{self.rel_path}'
+        return f"<FS_TREE>/{self.rel_path}"
+
 
 @dataclass(frozen=True)
 class SnapshotsDifference:
@@ -37,7 +41,7 @@ class SnapshotsDifference:
         return f"changes between {self.parent} and {self.snapshot}"
 
 
-def __compute_root_path(path):
+def _compute_root_path(path):
     """Compute the path of the root filesystem from subvolume path given in argument"""
     norm_path = os.path.normpath(path)
     rel_path = btrfsutil.subvolume_path(norm_path)
@@ -50,12 +54,12 @@ def __compute_root_path(path):
 
 def find_ro_snapshots_of(path) -> list[Snapshot]:
     """
-    Look for read only snapshots of subvolume designated by 'path' (which must be absolute).
-    Returns list of paths (relative to rootfs) of RO snapshots sorted chronologically based on creation time of subvolume.
+    Look for read only snapshots of subvolume designated by 'path'.
+    Returns list of paths (relative to rootfs) of RO snapshots sorted chronologically based on creation time.
     """
     path = os.path.abspath(path)
     ro_snapshots: list[Snapshot] = []
-    root_fs_path = __compute_root_path(path)
+    root_fs_path = _compute_root_path(path)
     uuid = UUID(bytes=btrfsutil.subvolume_info(path).uuid)
     uuid_str = str(uuid)
     fs_uuid = UUID(bytes=btrfsutil.subvolume_info(root_fs_path).uuid)

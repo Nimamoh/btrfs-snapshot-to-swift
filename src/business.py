@@ -2,13 +2,12 @@
 Module related to business logic.
 """
 
-from typing import Iterator, Optional, Sequence, Union
+from typing import Iterator, Sequence, Union
 from btrfs import Snapshot, SnapshotsDifference
 from storage import compute_storage_filename
 from exceptions import ProgrammingError
 
 import os
-import logging
 import subprocess
 import shutil
 import contextlib
@@ -61,7 +60,7 @@ def compute_snapshot_to_archive(snapshots: Sequence[Snapshot], archived: Sequenc
     sane_check(archived)
 
     if not snapshots:
-        return #type: ignore
+        return
     if not archived:
         yield from chain_of(snapshots)
         return
@@ -74,7 +73,7 @@ def compute_snapshot_to_archive(snapshots: Sequence[Snapshot], archived: Sequenc
     )
     assert len(snapshots) == len(corresponding_archives)
 
-    chain: Sequence[Snapshot] = []
+    chain = []
     for i, (s, a) in enumerate(zip(snapshots, corresponding_archives)):
         if a is not None and s != a:
             raise unequal_snapshots_ex(s, a)
@@ -82,7 +81,7 @@ def compute_snapshot_to_archive(snapshots: Sequence[Snapshot], archived: Sequenc
         if a is not None:
             chain = [a]
             continue
-        chain += snapshots[i:] #type: ignore
+        chain += snapshots[i:]
         break
 
     yield from (chain_of(chain)[1:])
@@ -98,12 +97,10 @@ class PrepareContent:
     """
     Prepare the content to upload to a local file
     Args:
-      to_upload (ContentToArchive): describe the content to ultimately upload,
-        that we will be turning in a file beforehand
-      basedir (basedir): directory in which we will store the file.
-        Consider that change to existing files in that directory may happen.
-    Returns:
-      str: the absolute path in which we stored the file to upload
+      content (ContentToArchive): describe the content to ultimately upload,
+        that we will be turning in a file beforehand.
+      dirname (str): directory in which we will store the file.
+        Consider that arbitrary change to existing files in that directory may happen.
     Raises:
       PrepareContentEx
     """

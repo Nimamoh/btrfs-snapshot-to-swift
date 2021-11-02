@@ -17,9 +17,9 @@ Synchronization process consists of:
 
  - It only works with local readonly snapshots. Also, since it identifies snapshots using a naming convention, don't update / replace snapshot content. Prefer "immutable" snapshot with name based on date.
 
- - It performs incremental backups, this means that content stored in swift container form a "chain" which should not be broken. Don't manually delete archived content.
+ - It expect to find the same layout of snapshots consistently. Do not delete local snapshots.
 
- - Incremental changes is computed with local snapshots, if you delete local snapshots, make sure to keep the *last archived one* locally to conserve incremental behavior. Otherwise, the whole snapshot will be archived.
+ - It performs incremental backups, this means that content stored in swift container form a "chain" which should not be broken. Don't manually delete archived content in swift container.
 
  - Content is first computed and store locally in "working directory", it is then uploaded in swift. For large subvolumes (especially in initial archiving of the whole content), make sure you have enough space in working directory.
 

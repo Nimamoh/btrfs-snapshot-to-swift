@@ -39,15 +39,6 @@ def _snapshot_gen():
     )
 
 
-def _snapshot_diff_gen():
-    snapshots_gen = _snapshot_gen()
-    previous = None
-    for snap in snapshots_gen:
-        current = snap
-        if current and previous:
-            yield SnapshotsDifference(parent=previous, snapshot=current)
-
-
 @pytest.mark.parametrize(
     "snapshots,archived",
     [

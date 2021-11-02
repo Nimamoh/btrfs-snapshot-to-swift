@@ -3,7 +3,7 @@ storage module is about archive storage routines
 """
 import logging
 import os
-from typing import Union
+from typing import Sequence, Union
 
 from swiftclient.service import SwiftService, SwiftUploadObject
 
@@ -52,7 +52,7 @@ def compute_storage_filename(
 ) -> str:
     """
     Compute unique filename of a btrfs snapshot for storage.
-    Basically fs_uuid/relpath. Uniquely identifies a btrfs snapshot.
+    Uniquely identifies a btrfs snapshot.
     """
     s = None
     if isinstance(snapshot_or_diff, Snapshot):
@@ -80,10 +80,12 @@ def _sanitize_storage_filename(name: str):
     return name
 
 
-def only_stored(ro_snapshots: list[Snapshot], container_name: str) -> list[Snapshot]:
+def only_stored(
+    ro_snapshots: Sequence[Snapshot], container_name: str
+) -> Sequence[Snapshot]:
     """
     Args:
-      ro_snapshots(list[Snapshot]): snapshots to check against storage
+      ro_snapshots(Sequence[Snapshot]): snapshots to check against storage
 
     Returns:
       Filtered list of btrfs snapshots, conserving only the ones present in storage
