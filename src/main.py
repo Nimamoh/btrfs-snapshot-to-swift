@@ -240,10 +240,12 @@ def main():
     status = 0
     try:
         process(args)
+    except KeyboardInterrupt:
+        _log.info("You cancelled. Bybye")
+        status = -1
     except UnexpectedSnapshotStorageLayout:
-        _log.error(
-            f"Layout of files is not a subset of local snapshots. Please read the documentation."
-        )
+        msg = "Layout of files is not a subset of local snapshots. Please read the documentation."
+        _log.error(msg)
         status = -1
     except:
         _log.exception("Oops, an error occured. Here is what went wrong:")
