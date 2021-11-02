@@ -1,3 +1,8 @@
+# TODO
+
+- [x] rate of progress report in prepare / upload when in non-interactive mode.
+- [] helios btrfs has no uuid, don't rely on it?
+
 # ❄ BTRFS snapshots to OpenShift container ❄
 
 Tool for synchronizing btrfs snapshots to a [swift compliant object store](https://docs.openstack.org/swift/latest/).

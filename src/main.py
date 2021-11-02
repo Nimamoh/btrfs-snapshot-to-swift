@@ -72,7 +72,8 @@ def _prepare_snapshot_to_archive(to_archive, ctx: Ctx) -> str:
 
     with print_lines(["Initializing preparation ⏳"], ctx) as printer:
         for progress_line in preparator.prepare():
-            printer.reprint([progress_line])
+            if ctx.is_interactive:
+                printer.reprint([progress_line])
 
         elapsed = precisedelta(time.time() - start)
         size = naturalsize(os.path.getsize(filepath))
@@ -183,14 +184,11 @@ def process(args):
             humanized_filesize = naturalsize(filesize)
             msg_prefix = f" ⏳ Uploading {content_to_archive}."
             with print_lines([f"{msg_prefix} This might take awhile."], ctx) as printer:
-                for transferred in upload(
-                    filepath=filepath, container_name=ctx.container_name
-                ):
-                    printer.reprint(
-                        [
-                            f"{msg_prefix} {naturalsize(transferred)}/{humanized_filesize}"
-                        ]
-                    )
+                for transferred in upload(filepath, ctx.container_name):
+                    if ctx.is_interactive:
+                        msg = f"{msg_prefix}"
+                        msg += f" {naturalsize(transferred)}/{humanized_filesize}"
+                        printer.reprint([msg])
                 printer.reprint([f"Uploaded {content_to_archive} 💪"])
 
 
