@@ -13,6 +13,8 @@ from pprint import pformat
 
 _log = logging.getLogger(__name__)
 
+ContentToArchive = Union[Snapshot, SnapshotsDifference]
+
 
 class UploadFailure(RuntimeError):
     """Raised when upload fails"""
@@ -47,22 +49,20 @@ def _parse_list_page_gen(list_parts_gen):
     return names
 
 
-def compute_storage_filename(
-    snapshot_or_diff: Union[Snapshot, SnapshotsDifference]
-) -> str:
+def compute_storage_filename(to_archive: ContentToArchive) -> str:
     """
     Compute unique filename of a btrfs snapshot for storage.
     Uniquely identifies a btrfs snapshot.
     """
     s = None
-    if isinstance(snapshot_or_diff, Snapshot):
-        s = snapshot_or_diff
-    elif isinstance(snapshot_or_diff, SnapshotsDifference):
-        s = snapshot_or_diff.snapshot
+    if isinstance(to_archive, Snapshot):
+        s = to_archive
+    elif isinstance(to_archive, SnapshotsDifference):
+        s = to_archive.snapshot
     else:
         raise ProgrammingError
 
-    return _sanitize_storage_filename(f"{s.fs_uuid}/{s.rel_path}")
+    return _sanitize_storage_filename(f"{s.parent_uuid}/{s.rel_path}")
 
 
 def _sanitize_storage_filename(name: str):

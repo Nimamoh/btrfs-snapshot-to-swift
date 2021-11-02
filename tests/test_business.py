@@ -14,25 +14,25 @@ _static_uuids = tuple(u() for u in repeat(uuid4, 10))
 
 def _snapshot_gen():
     yield Snapshot(
-        fs_uuid=_static_uuids[0],
+        parent_uuid=_static_uuids[0],
         rel_path="/snapshots/1",
         abs_path="/fs/snapshots/1",
         otime=0.0,
     )
     yield Snapshot(
-        fs_uuid=_static_uuids[1],
+        parent_uuid=_static_uuids[1],
         rel_path="/snapshots/2",
         abs_path="/fs/snapshots/2",
         otime=1.0,
     )
     yield Snapshot(
-        fs_uuid=_static_uuids[2],
+        parent_uuid=_static_uuids[2],
         rel_path="/snapshots/3",
         abs_path="/fs/snapshots/3",
         otime=2.0,
     )
     yield Snapshot(
-        fs_uuid=_static_uuids[3],
+        parent_uuid=_static_uuids[3],
         rel_path="/snapshots/4",
         abs_path="/fs/snapshots/4",
         otime=3.0,

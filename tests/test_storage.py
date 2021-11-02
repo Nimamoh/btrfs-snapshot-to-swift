@@ -58,7 +58,7 @@ def _configure_list_mock(mock: MagicMock, *names: str):
 def _make_btrfs_snapshots(*rel_paths: str):
     """Make list of btrfs snapshots with rel_paths, faking/inferring rest of parameters"""
     return list(
-        Snapshot(fs_uuid=str(uuid.uuid4()), rel_path=x, abs_path="/", otime=0.0)
+        Snapshot(parent_uuid=str(uuid.uuid4()), rel_path=x, abs_path="/", otime=0.0)
         for x in rel_paths
     )
 

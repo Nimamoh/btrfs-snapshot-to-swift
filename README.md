@@ -34,10 +34,10 @@ Synchronization process consists of:
 
 Each snapshot is identified by a name which is computed from its relative path such as, for a relative path `<relative_path>`:
 
-- We prefix the UUID of the root filesystem of the snapshot `<UUIDFS>/`
+- We prefix the UUID of parent subvolume the snapshot `<PUUID>/`
 - We escape each `/` folder separator character with a literal `\x2f`
 
-- For a snapshot with relative path `snapshots/subolume-1`. Its name would be `<UUIDFS>\x2fsnapshtos\x2fsubvolume-1`
+- For a snapshot with relative path `snapshots/subolume-1`. Its name would be `<PUUID>\x2fsnapshtos\x2fsubvolume-1`
 
 **We do not accept snapshot which relative path contains literal `\x2f`**
 

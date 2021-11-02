@@ -34,9 +34,10 @@ def test_find_ro_snapshots_of(
         assert snapshots[1].rel_path == "snapshots/subvol.1"
         assert snapshots[2].rel_path == "snapshots/subvol.2"
 
-        fs_subvol = model.subvol("")  # root fs subvol has abs path ''
         for snapshot in snapshots:
-            assert snapshot.fs_uuid == fs_subvol.uuid_as_str()
+            model_subvol = model.subvol(snapshot.rel_path)
+            parent_uuid_str = str(uuid.UUID(bytes=model_subvol.parent_uuid))
+            assert snapshot.parent_uuid == parent_uuid_str
 
     test_with_model("/fs")
     test_with_model("/")
@@ -49,7 +50,7 @@ def test_snapshot_is_hashable():
 
 def test_shapshot_uuid():
     uuid_str = str(uuid.uuid4())
-    s = Snapshot(fs_uuid=uuid_str, rel_path="", abs_path="", otime=0.0)
+    s = Snapshot(parent_uuid=uuid_str, rel_path="", abs_path="", otime=0.0)
     l = []
     l.append(s)
 

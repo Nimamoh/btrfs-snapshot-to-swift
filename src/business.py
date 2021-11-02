@@ -2,9 +2,9 @@
 Module related to business logic.
 """
 
-from typing import Iterator, Sequence, Union
+from typing import Iterator, Sequence
 from btrfs import Snapshot, SnapshotsDifference
-from storage import compute_storage_filename
+from storage import compute_storage_filename, ContentToArchive
 from exceptions import ProgrammingError
 
 import os
@@ -21,8 +21,6 @@ class UnexpectedSnapshotStorageLayout(Exception):
 def unequal_snapshots_ex(s1, s2) -> UnexpectedSnapshotStorageLayout:
     raise UnexpectedSnapshotStorageLayout(f"{s1} should equals {s2}")
 
-
-ContentToArchive = Union[Snapshot, SnapshotsDifference]
 
 def compute_snapshot_to_archive(snapshots: Sequence[Snapshot], archived: Sequence[Snapshot]) -> Iterator[ContentToArchive]:
     """

@@ -17,8 +17,8 @@ _log = logging.getLogger(__name__)
 class Snapshot:
     """Represents a local btrfs snapshot"""
 
-    fs_uuid: str
-    """UUID string of the btrfs filesystem where the snapshot is"""
+    parent_uuid: str
+    """UUID string of parent subvolume. (which subvolume is represented by this snapshots)"""
     rel_path: str
     """relative path from btrfs filesystem"""
     abs_path: str
@@ -62,8 +62,6 @@ def find_ro_snapshots_of(path) -> list[Snapshot]:
     root_fs_path = _compute_root_path(path)
     uuid = UUID(bytes=btrfsutil.subvolume_info(path).uuid)
     uuid_str = str(uuid)
-    fs_uuid = UUID(bytes=btrfsutil.subvolume_info(root_fs_path).uuid)
-    fs_uuid_str = str(fs_uuid)
     _log.debug(f'Looking for readonly snapshot of "{path}" which has uuid "{uuid_str}"')
 
     with btrfsutil.SubvolumeIterator(path, TOP_LEVEL_SUBVOL_ID) as it:
@@ -76,7 +74,7 @@ def find_ro_snapshots_of(path) -> list[Snapshot]:
             # debug(f'Checking if "{curr_fullpath_}" is readonly: "{ro}"')
             if curr_parent_uuid == uuid and ro:
                 snapshot = Snapshot(
-                    fs_uuid=fs_uuid_str,
+                    parent_uuid=str(curr_parent_uuid),
                     rel_path=curr_path_,
                     abs_path=curr_fullpath_,
                     otime=otime,
