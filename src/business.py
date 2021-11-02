@@ -8,9 +8,12 @@ from storage import compute_storage_filename, ContentToArchive
 from exceptions import ProgrammingError
 
 import os
+import logging
 import subprocess
 import shutil
 import contextlib
+
+_log = logging.getLogger(__name__)
 
 class UnexpectedSnapshotStorageLayout(Exception):
     """Raised when local snapshots and distant stored snapshots differs too much to be reliable"""
@@ -172,6 +175,8 @@ class PrepareContent:
         else:
             raise ProgrammingError
 
+        _log.debug("Send command:")
+        _log.debug(cmd)
         return subprocess.Popen(cmd, stderr=subprocess.DEVNULL, stdout=stdout)
     
     def _age_process(self, stdin, stdout):
@@ -181,6 +186,8 @@ class PrepareContent:
         recipient = self.__age_recipient
         cmd = [self.__which_age, "-r", recipient]
 
+        _log.debug("Age command:")
+        _log.debug(cmd)
         return subprocess.Popen(cmd, stdin=stdin, stdout=stdout)
 
     def _pv_process(self, stdin, stdout, ratelimit):
@@ -190,6 +197,9 @@ class PrepareContent:
         cmd = [self.__which_pv, "-i", "1", "-f"]
         if ratelimit:
             cmd += ["-L", ratelimit]
+
+        _log.debug("pv command:")
+        _log.debug(cmd)
         return subprocess.Popen(
             cmd,
             stdin=stdin,
