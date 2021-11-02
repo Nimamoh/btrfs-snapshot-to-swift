@@ -7,7 +7,7 @@ long_description = (here / 'README.md').read_text(encoding='utf-8')
 
 setup(
     name='btrfs-snapshot-to-swift',
-    version='0.0.1+0',
+    version='1.0.0',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='Nimamoh',
@@ -33,4 +33,12 @@ setup(
     entry_points={
         'console_scripts': ['btrfs-snapshots-to-swift=main:main']
     },
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'Environment :: Console',
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+        'Topic :: System :: Systems Administration',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.9',
+    ],
 )
