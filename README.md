@@ -2,6 +2,8 @@
 
 Tool for synchronizing btrfs snapshots to a [swift compliant object store](https://docs.openstack.org/swift/latest/).
 
+*It is usable in interactive mode, non-interactive mode for automation and optionally support encryption through [age](https://github.com/FiloSottile/age).*
+
 Given a subvolume, this script detects its local snapshots. Each local snapshot is then synchronized with swift container. The snapshots are backup'd in an incremental fashion.   
 
 Synchronization process consists of:
@@ -38,7 +40,7 @@ Each snapshot is identified by a name which is computed from its relative path s
 
 ## How to install
 
-Tool is not available through PyPI. You can install the script with [pipx](https://github.com/pypa/pipx).
+Tool is not available through PyPI (yet?). You can install the script with [pipx](https://github.com/pypa/pipx).
 
 ```fish
 pipx install --system-site-packages --editable (pwd)
@@ -53,9 +55,7 @@ pipx install --system-site-packages --editable (pwd)
 Script is available through `btrfs-snapshot-to-swift` command.
 
 ```
-usage: btrfs-snapshots-to-swift [-h] --container-name CONTAINER_NAME [--work-dir WORK_DIR] [--dry-run] [--age-recipient AGE_RECIPIENT]
-                                [--syslog [SYSLOG]] [-v]
-                                path
+usage: btrfs-snapshot-to-swift [-h] --container-name CONTAINER_NAME [--work-dir WORK_DIR] [--dry-run] [--age-recipient AGE_RECIPIENT] [--syslog [SYSLOG]] [-v] path
 
 List snapshots of subvolume
 
