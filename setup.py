@@ -7,7 +7,7 @@ long_description = (here / 'README.md').read_text(encoding='utf-8')
 
 setup(
     name='btrfs-snapshot-to-swift',
-    version='1.0.2',
+    version='1.0.3.dev1',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='Nimamoh',
