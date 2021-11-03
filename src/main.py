@@ -174,7 +174,7 @@ def process(args):
             filesize = os.path.getsize(filepath)
 
             if ctx.dry_run:
-                return
+                continue
 
             consent = _ask_archiving(content_to_archive, filepath, ctx=ctx)
             if not consent:
